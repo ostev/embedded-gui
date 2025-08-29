@@ -78,7 +78,29 @@ pub fn draw_instruction(
                         token_stream
                     });
 
-                quote! { #struct_declarations }
+                let struct_identifier = input.ident;
+                let enum_identifier = format_ident!("{}Discriminant", struct_identifier);
+                let variant_identifiers = variants.iter().map(|variant| variant.identifier);
+                let field_identifiers = variant_identifiers.clone().map(|identifier| format_ident!("properties_{}", identifier));
+                let field_type_identifiers = variants.iter().map(|variant| format_ident!("DrawInstruction{}Properties", variant.identifier));
+
+                quote! { 
+                    #struct_declarations
+
+                    #[allow(non_snake_case)]
+                    struct Properties {
+                        #(#field_identifiers: Vec<#field_type_identifiers>), *
+                    }
+
+                    enum #enum_identifier {
+                        #(#variant_identifiers),*
+                    }
+
+                    struct #struct_identifier {
+                        discriminant: #enum_identifier,
+                        properties_index: u16,
+                    }
+                }
             }
             Err(error) => error.to_compile_error(),
         },

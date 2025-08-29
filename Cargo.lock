@@ -108,12 +108,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "embedded-gui"
+name = "embedded_gui"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "embedded-graphics-simulator",
+ "embedded_gui_macros",
  "glyphr",
+]
+
+[[package]]
+name = "embedded_gui_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

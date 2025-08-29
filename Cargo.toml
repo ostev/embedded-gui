@@ -1,14 +1,18 @@
 [package]
-name = "embedded-gui"
+name = "embedded_gui"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 embedded-graphics = "0.8.1"
 glyphr = "0.5.0"
+embedded_gui_macros = { path = "embedded_gui_macros" }
 
 [[example]]
 name = "font-rendering"
 
 [dev-dependencies]
 embedded-graphics-simulator = "0.7.0"
+
+[workspace]
+members = ["embedded_gui_macros"]

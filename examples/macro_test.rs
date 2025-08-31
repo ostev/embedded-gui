@@ -1,9 +1,14 @@
-use embedded_gui_macros::draw_instruction;
+// use embedded_gui_macros::draw_instruction;
 
-#[draw_instruction]
-enum CustomDrawInstruction {
-    Button { text: String, color: u32 },
-    Panel(u32, u16),
-}
+// struct Button {
+//     action: Box<dyn Fn() -> ()>,
+//     text: String,
+// }
+
+// #[draw_instruction]
+// enum CustomDrawInstruction {
+//     Button(Button),
+//     Panel(u32),
+// }
 
 fn main() {}

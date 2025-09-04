@@ -1,14 +1,18 @@
-// use embedded_gui_macros::draw_instruction;
+use embedded_gui::element::Draw;
+use embedded_gui_macros::draw_instruction;
 
-// struct Button {
-//     action: Box<dyn Fn() -> ()>,
-//     text: String,
-// }
+struct Button {}
 
-// #[draw_instruction]
-// enum CustomDrawInstruction {
-//     Button(Button),
-//     Panel(u32),
-// }
+impl Draw for Button {
+    fn draw(&self) {
+        println!("Hello, world!");
+    }
+}
+
+draw_instruction! {
+    DrawInstruction {
+        Button(Button)
+    }
+}
 
 fn main() {}

@@ -1,3 +1,3 @@
 #![no_std]
 
-mod element;
+pub mod element;

@@ -88,6 +88,7 @@ pub fn draw_instruction(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
 
         impl #struct_identifier {
             #(
+            #[allow(non_snake_case)]
             fn #new_function_identifiers(element_properties: #new_type_identifiers, properties: &mut #properties_identifier) -> Self {
                 let properties_vec: &mut Vec<_> = &mut properties.#new_field_identifiers;
                 let index = properties_vec.len() as u16;

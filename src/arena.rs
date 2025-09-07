@@ -86,8 +86,15 @@ impl<T> Arena<T> {
             phantom: PhantomData,
         };
 
-        // We'll run out of memory before failing
-        self.length += 1;
+        if core::mem::size_of::<T>() == 0 {
+            self.length = self
+                .length
+                .checked_add(1)
+                .expect("Length exceeds maximum size of `Index` type.");
+        } else {
+            // We'll run out of memory before failing
+            self.length += 1;
+        }
 
         arena_ref
     }

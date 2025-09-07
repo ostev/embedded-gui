@@ -25,8 +25,8 @@ unsafe impl<T: Send> Send for Arena<T> {}
 unsafe impl<T: Sync> Sync for Arena<T> {}
 
 impl<T> Arena<T> {
-    const STARTING_CAPACITY: u16 = if core::mem::size_of::<T>() == 0 {
-        u16::MAX
+    const STARTING_CAPACITY: Index = if core::mem::size_of::<T>() == 0 {
+        Index::MAX
     } else {
         0
     };
@@ -72,9 +72,17 @@ impl<T> Arena<T> {
         }
     }
 
+    fn grow(&mut self) {
+        assert!(
+            core::mem::size_of::<T>() != 0,
+            "The arena is at maximum capacity."
+        );
+        self.realloc(self.length + 20);
+    }
+
     pub fn push(&mut self, element: T) -> Ref<T> {
         if self.length == self.capacity {
-            self.realloc(self.length + 10);
+            self.grow();
         }
 
         unsafe {
@@ -86,17 +94,14 @@ impl<T> Arena<T> {
             phantom: PhantomData,
         };
 
-        if core::mem::size_of::<T>() == 0 {
-            self.length = self
-                .length
-                .checked_add(1)
-                .expect("Length exceeds maximum size of `Index` type.");
-        } else {
-            // We'll run out of memory before failing
-            self.length += 1;
-        }
+        // We'll run out of memory before overflowing
+        self.length += 1;
 
         arena_ref
+    }
+
+    pub fn checked_push(&mut self, element: T) -> Option<Ref<T>> {
+        self.length.checked_add(1).map(|_| self.push(element))
     }
 }
 

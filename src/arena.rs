@@ -1,19 +1,13 @@
-use core::{marker::PhantomData, ptr::NonNull};
+use core::{marker::PhantomData, ops, ptr::NonNull};
 
 use alloc::alloc;
 
 type Index = u16;
 
-pub trait Draw {
-    fn draw(&self) {}
-}
-
-pub struct Ref<T> {
+pub struct Box<T> {
     offset: u16,
-    phantom: PhantomData<T>,
+    phantom_type: PhantomData<T>,
 }
-
-impl<T> Ref<T> {}
 
 pub struct Arena<T> {
     ptr: NonNull<T>,
@@ -42,7 +36,7 @@ impl<T> Arena<T> {
     /// Reallocate the arena with a new capacity.
     /// If the new capacity is less than the existing number
     /// of items in the arena, those items will be discarded.
-    pub fn realloc(&mut self, new_capacity: Index) {
+    pub fn set_capacity(&mut self, new_capacity: Index) {
         if core::mem::size_of::<T>() != 0 {
             let new_layout = alloc::Layout::array::<T>(new_capacity.into()).unwrap();
 
@@ -77,10 +71,10 @@ impl<T> Arena<T> {
             core::mem::size_of::<T>() != 0,
             "The arena is at maximum capacity."
         );
-        self.realloc(self.length + 20);
+        self.set_capacity(self.length + 20);
     }
 
-    pub fn push(&mut self, element: T) -> Ref<T> {
+    pub fn push(&mut self, element: T) -> Box<T> {
         if self.length == self.capacity {
             self.grow();
         }
@@ -89,9 +83,9 @@ impl<T> Arena<T> {
             core::ptr::write(self.ptr.as_ptr().add(self.length.into()), element);
         }
 
-        let arena_ref = Ref {
+        let arena_ref = Box {
             offset: self.length,
-            phantom: PhantomData,
+            phantom_type: PhantomData,
         };
 
         // We'll run out of memory before overflowing
@@ -100,8 +94,34 @@ impl<T> Arena<T> {
         arena_ref
     }
 
-    pub fn checked_push(&mut self, element: T) -> Option<Ref<T>> {
+    pub fn checked_push(&mut self, element: T) -> Option<Box<T>> {
         self.length.checked_add(1).map(|_| self.push(element))
+    }
+
+    #[inline]
+    pub unsafe fn get_unchecked(&self, ptr: Box<T>) -> &T {
+        unsafe { &*self.ptr.as_ptr().add(ptr.offset.into()) }
+    }
+
+    pub fn get(&self, ptr: Box<T>) -> Option<&T> {
+        if ptr.offset < self.length {
+            Some(unsafe { self.get_unchecked(ptr) })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub unsafe fn get_mut_unchecked(&mut self, ptr: Box<T>) -> &mut T {
+        unsafe { &mut *self.ptr.as_ptr().add(ptr.offset.into()) }
+    }
+
+    pub fn get_mut(&mut self, ptr: Box<T>) -> Option<&mut T> {
+        if ptr.offset < self.length {
+            Some(unsafe { self.get_mut_unchecked(ptr) })
+        } else {
+            None
+        }
     }
 }
 
@@ -133,5 +153,19 @@ impl<T> core::ops::Deref for Arena<T> {
 impl<T> core::ops::DerefMut for Arena<T> {
     fn deref_mut(&mut self) -> &mut [T] {
         unsafe { core::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.length.into()) }
+    }
+}
+
+impl<T> ops::Index<Box<T>> for Arena<T> {
+    type Output = T;
+
+    fn index(&self, index: Box<T>) -> &Self::Output {
+        self.get(index).expect("Index out of bounds")
+    }
+}
+
+impl<T> ops::IndexMut<Box<T>> for Arena<T> {
+    fn index_mut(&mut self, index: Box<T>) -> &mut Self::Output {
+        self.get_mut(index).expect("Index out of bounds")
     }
 }

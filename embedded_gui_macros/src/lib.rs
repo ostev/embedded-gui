@@ -66,9 +66,7 @@ pub fn draw_instruction(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
     let new_function_identifiers = variant_identifiers
         .clone()
         .map(|variant| format_ident!("new_{}", variant));
-    // let new_discriminants = input.variants.iter().map(|variant| format_ident!("{}::{}"variant.type_ident);
     let new_type_identifiers = field_type_identifiers.clone();
-
     let output = quote! {
         #[allow(non_snake_case)]
         struct #properties_identifier {
@@ -83,16 +81,14 @@ pub fn draw_instruction(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
         #[derive(Clone, Debug, PartialEq, Eq)]
         struct #struct_identifier {
             discriminant: #enum_identifier,
-            properties_index: u16,
+            pointer_offset: u16,
         }
 
         impl #struct_identifier {
             #(
             #[allow(non_snake_case)]
-            fn #new_function_identifiers(element_properties: #new_type_identifiers, properties: &mut #properties_identifier) -> Self {
-                let properties_vec: &mut Vec<_> = &mut properties.#new_field_identifiers;
-                let index = properties_vec.len() as u16;
-                properties_vec.push(element_properties);
+            fn #new_function_identifiers(element_properties: #new_type_identifiers) -> Self {
+                let boxed_properties = ::alloc::boxed::Box::new(element_properties);
 
                 Self {
                     discriminant: #enum_identifier::#new_variant_identifiers,
@@ -111,7 +107,17 @@ pub fn draw_instruction(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
                 }
             }
         }
+
+
     };
 
     proc_macro::TokenStream::from(output)
 }
+
+// #[proc_macro]
+// pub fn new(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+//     quote! {
+//         todo!("Not yet implemented")
+//     }
+//     .into()
+// }

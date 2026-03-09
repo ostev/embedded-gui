@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, ops, ptr::NonNull};
+use core::{cell::Ref, marker::PhantomData, mem::MaybeUninit, ops, ptr::NonNull};
 
 use alloc::alloc;
 
@@ -15,9 +15,6 @@ pub struct Arena<T> {
     length: Index,
 }
 
-unsafe impl<T: Send> Send for Arena<T> {}
-unsafe impl<T: Sync> Sync for Arena<T> {}
-
 impl<T> Arena<T> {
     const STARTING_CAPACITY: Index = if core::mem::size_of::<T>() == 0 {
         Index::MAX
@@ -25,7 +22,7 @@ impl<T> Arena<T> {
         0
     };
 
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             ptr: NonNull::dangling(),
             length: 0,
@@ -112,8 +109,8 @@ impl<T> Arena<T> {
     }
 
     #[inline]
-    pub unsafe fn get_mut_unchecked(&mut self, ptr: Box<T>) -> &mut T {
-        unsafe { &mut *self.ptr.as_ptr().add(ptr.offset.into()) }
+    pub unsafe fn get_mut_unchecked(&mut self, boxed: Box<T>) -> &mut T {
+        unsafe { &mut *self.ptr.as_ptr().add(boxed.offset.into()) }
     }
 
     pub fn get_mut(&mut self, ptr: Box<T>) -> Option<&mut T> {

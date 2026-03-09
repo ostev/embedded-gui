@@ -15,4 +15,10 @@ draw_instruction! {
     }
 }
 
+// macro_rules! new {
+//     ($type_name:ident $properties:expr) => {
+//         DrawInstruction::new_$type_name()
+//     };
+// }
+
 fn main() {}

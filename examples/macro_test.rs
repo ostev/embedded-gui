@@ -1,24 +1,25 @@
-use embedded_gui::element::Draw;
-use embedded_gui_macros::draw_instruction;
+#![feature(trace_macros)]
 
-struct Button {}
+use embedded_gui::{draw, primitive::Primitive, signal::Signal};
+use embedded_gui_macros::{Reactive, primitives};
 
-impl Draw for Button {
-    fn draw(&self) {
+#[derive(Reactive)]
+struct Button {
+    text: Signal<String>,
+    width: Signal<usize>,
+    height: Signal<usize>,
+}
+
+impl Primitive for Button {
+    fn draw(&self, target: impl draw::Target) {
         println!("Hello, world!");
     }
 }
 
-draw_instruction! {
-    DrawInstruction {
+primitives! {
+    Primitives {
         Button(Button)
     }
 }
-
-// macro_rules! new {
-//     ($type_name:ident $properties:expr) => {
-//         DrawInstruction::new_$type_name()
-//     };
-// }
 
 fn main() {}

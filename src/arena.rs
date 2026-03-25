@@ -1,21 +1,51 @@
-use core::{cell::Ref, marker::PhantomData, mem::MaybeUninit, ops, ptr::NonNull};
+use core::{
+    marker::{PhantomContravariantLifetime, PhantomCovariantLifetime, PhantomData},
+    ops::{self, Deref},
+    ptr::NonNull,
+};
 
 use alloc::alloc;
 
 type Index = u16;
 
-pub struct Box<T> {
-    offset: u16,
-    phantom_type: PhantomData<T>,
+// #[derive(Clone, Copy, Debug)]
+// pub struct Box<'a, T> {
+//     offset: u16,
+//     phantom: PhantomData<&'a T>,
+// }
+
+// impl<'a, T> Into<UntypedPointer<'a>> for Box<'a, T> {
+//     #[inline(always)]
+//     fn into(self) -> UntypedPointer<'a> {
+//         UntypedPointer {
+//             offset: self.offset,
+//             phantom: PhantomCovariantLifetime::new(),
+//         }
+//     }
+// }
+
+#[derive(Copy, Clone)]
+pub struct UntypedPointer<'a> {
+    offset: Index,
+    phantom: PhantomCovariantLifetime<'a>,
 }
 
-pub struct Arena<T> {
+#[derive(Clone, Copy)]
+pub struct RangePointer<'a> {
+    start: Index,
+    length: Index,
+    phantom: PhantomCovariantLifetime<'a>,
+}
+
+#[derive(Clone)]
+pub struct Arena<'a, T> {
     ptr: NonNull<T>,
     capacity: Index,
     length: Index,
+    lifetime: PhantomContravariantLifetime<'a>,
 }
 
-impl<T> Arena<T> {
+impl<'a, T> Arena<'a, T> {
     const STARTING_CAPACITY: Index = if core::mem::size_of::<T>() == 0 {
         Index::MAX
     } else {
@@ -27,6 +57,7 @@ impl<T> Arena<T> {
             ptr: NonNull::dangling(),
             length: 0,
             capacity: Self::STARTING_CAPACITY,
+            lifetime: PhantomContravariantLifetime::new(),
         }
     }
 
@@ -63,26 +94,26 @@ impl<T> Arena<T> {
         }
     }
 
-    fn grow(&mut self) {
+    fn grow(&mut self, increase: Index) {
         assert!(
             core::mem::size_of::<T>() != 0,
             "The arena is at maximum capacity."
         );
-        self.set_capacity(self.length + 20);
+        self.set_capacity(self.length + increase);
     }
 
-    pub fn push(&mut self, element: T) -> Box<T> {
+    pub fn alloc(&mut self, element: T) -> UntypedPointer<'a> {
         if self.length == self.capacity {
-            self.grow();
+            self.grow(20);
         }
 
         unsafe {
             core::ptr::write(self.ptr.as_ptr().add(self.length.into()), element);
         }
 
-        let arena_ref = Box {
+        let arena_ref = UntypedPointer {
             offset: self.length,
-            phantom_type: PhantomData,
+            phantom: PhantomCovariantLifetime::new(),
         };
 
         // We'll run out of memory before overflowing
@@ -91,16 +122,12 @@ impl<T> Arena<T> {
         arena_ref
     }
 
-    pub fn checked_push(&mut self, element: T) -> Option<Box<T>> {
-        self.length.checked_add(1).map(|_| self.push(element))
-    }
-
     #[inline]
-    pub unsafe fn get_unchecked(&self, ptr: Box<T>) -> &T {
+    pub unsafe fn get_unchecked(&self, ptr: UntypedPointer<'a>) -> &'a T {
         unsafe { &*self.ptr.as_ptr().add(ptr.offset.into()) }
     }
 
-    pub fn get(&self, ptr: Box<T>) -> Option<&T> {
+    pub fn get(&self, ptr: UntypedPointer<'a>) -> Option<&'a T> {
         if ptr.offset < self.length {
             Some(unsafe { self.get_unchecked(ptr) })
         } else {
@@ -109,11 +136,11 @@ impl<T> Arena<T> {
     }
 
     #[inline]
-    pub unsafe fn get_mut_unchecked(&mut self, boxed: Box<T>) -> &mut T {
+    pub unsafe fn get_mut_unchecked(&mut self, boxed: UntypedPointer<'a>) -> &'a mut T {
         unsafe { &mut *self.ptr.as_ptr().add(boxed.offset.into()) }
     }
 
-    pub fn get_mut(&mut self, ptr: Box<T>) -> Option<&mut T> {
+    pub fn get_mut(&mut self, ptr: UntypedPointer<'a>) -> Option<&'a mut T> {
         if ptr.offset < self.length {
             Some(unsafe { self.get_mut_unchecked(ptr) })
         } else {
@@ -122,7 +149,7 @@ impl<T> Arena<T> {
     }
 }
 
-impl<T> Drop for Arena<T> {
+impl<'a, T> Drop for Arena<'a, T> {
     fn drop(&mut self) {
         if self.capacity != 0 {
             let layout = alloc::Layout::array::<T>(self.capacity.into()).unwrap();
@@ -140,29 +167,29 @@ impl<T> Drop for Arena<T> {
     }
 }
 
-impl<T> core::ops::Deref for Arena<T> {
+impl<'a, T> core::ops::Deref for Arena<'a, T> {
     type Target = [T];
     fn deref(&self) -> &[T] {
         unsafe { core::slice::from_raw_parts(self.ptr.as_ptr(), self.length.into()) }
     }
 }
 
-impl<T> core::ops::DerefMut for Arena<T> {
+impl<'a, T> core::ops::DerefMut for Arena<'a, T> {
     fn deref_mut(&mut self) -> &mut [T] {
         unsafe { core::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.length.into()) }
     }
 }
 
-impl<T> ops::Index<Box<T>> for Arena<T> {
+impl<'a, T: 'a> ops::Index<UntypedPointer<'a>> for Arena<'a, T> {
     type Output = T;
 
-    fn index(&self, index: Box<T>) -> &Self::Output {
+    fn index(&self, index: UntypedPointer<'a>) -> &Self::Output {
         self.get(index).expect("Index out of bounds")
     }
 }
 
-impl<T> ops::IndexMut<Box<T>> for Arena<T> {
-    fn index_mut(&mut self, index: Box<T>) -> &mut Self::Output {
+impl<'a, T: 'a> ops::IndexMut<UntypedPointer<'a>> for Arena<'a, T> {
+    fn index_mut(&mut self, index: UntypedPointer<'a>) -> &'a mut Self::Output {
         self.get_mut(index).expect("Index out of bounds")
     }
 }

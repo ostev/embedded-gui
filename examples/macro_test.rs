@@ -1,6 +1,6 @@
 #![feature(trace_macros)]
 
-use embedded_gui::{draw, primitive::Primitive, signal::Signal};
+use embedded_gui::{arena::Arena, draw, primitive::Primitive, signal::Signal};
 use embedded_gui_macros::{Reactive, primitives};
 
 #[derive(Reactive)]
@@ -22,4 +22,14 @@ primitives! {
     }
 }
 
-fn main() {}
+fn main() {
+    let mut arena = Arena::new();
+    let button = Primitives::new_Button(
+        &mut arena,
+        Button {
+            text: todo!(),
+            width: todo!(),
+            height: todo!(),
+        },
+    );
+}

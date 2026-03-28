@@ -51,51 +51,43 @@ pub fn primitives(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let struct_identifier = input.ident;
     let enum_identifier = format_ident!("{}Discriminant", struct_identifier);
-    let properties_identifier = format_ident!("{}Properties", struct_identifier);
 
     let variant_identifiers = input.variants.iter().map(|variant| &variant.variant_ident);
     let draw_match_identifiers = variant_identifiers.clone();
-    let field_identifiers = variant_identifiers
-        .clone()
-        .map(|identifier| format_ident!("properties_{}", identifier));
-    let field_type_identifiers = input.variants.iter().map(|variant| &variant.type_ident);
 
-    let draw_field_identifiers = field_identifiers.clone();
+    let field_type_identifiers = input.variants.iter().map(|variant| &variant.type_ident);
+    let field_type_identifiers_2 = field_type_identifiers.clone();
+
     let new_variant_identifiers = variant_identifiers.clone();
     let new_function_identifiers = variant_identifiers
         .clone()
         .map(|variant| format_ident!("new_{}", variant));
-    let new_type_identifiers = field_type_identifiers.clone();
-    let output = quote! {
-        #[allow(non_snake_case)]
-        struct #properties_identifier<'a> {
-            #(#field_identifiers: ::embedded_gui::arena::Arena<'a, #field_type_identifiers>), *
-        }
 
+    let output = quote! {
         enum #enum_identifier {
             #(#variant_identifiers),*
         }
 
         struct #struct_identifier<'a> {
             discriminant: #enum_identifier,
-            properties: ::embedded_gui::arena::UntypedPointer<'a>,
+            properties: &'a (),
         }
 
         impl<'a> #struct_identifier<'a> {
             #(
             #[allow(non_snake_case)]
-            fn #new_function_identifiers(arena: &mut ::embedded_gui::arena::Arena<'a, #new_type_identifiers>, element_properties: #new_type_identifiers) -> Self {
+            fn #new_function_identifiers(arena: &mut ::embedded_gui::arena::Arena, element_properties: #field_type_identifiers) -> Self {
                 Self {
                     discriminant: #enum_identifier::#new_variant_identifiers,
-                    properties: arena.push(element_properties).into()
+                    properties: unsafe {&*(arena.alloc(element_properties) as *const _ as *const ()) }
                 }
             }
             )*
 
-            fn draw(&self, properties: #properties_identifier<'a>, target: impl ::embedded_gui::draw::Target) {
+            pub fn draw(&self, target: impl ::embedded_gui::draw::Target) {
                 match self.discriminant {
                     #(#enum_identifier::#draw_match_identifiers => {
-                        let element_properties = &properties.#draw_field_identifiers[self.properties];
+                        let element_properties = unsafe { &*(self.properties as *const _ as *const #field_type_identifiers_2) };
 
                         ::embedded_gui::primitive::Primitive::draw(element_properties, target);
                     }),*

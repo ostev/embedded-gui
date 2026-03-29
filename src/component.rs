@@ -1,5 +1,9 @@
-use crate::{arena::Arena, signal::Reactive};
+use bumpalo::Bump;
 
-pub trait Component<'a>: Reactive {
-    fn view(&self, arena: &mut Arena);
+use crate::{primitive::Primitive, signal::Reactive, view::View};
+
+pub trait Component<'a, P: Primitive, C>: Reactive {
+    fn view(&self, bump: &Bump, children: View<'a, P, Self>)
+    where
+        Self: Sized;
 }

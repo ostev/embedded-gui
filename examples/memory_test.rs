@@ -1,3 +1,5 @@
+use embedded_gui::{component::Component, primitive::Primitive, view::Widget};
+
 struct Button {
     background_color: u32,
     width: u32,
@@ -35,5 +37,5 @@ struct Properties {
 }
 
 fn main() {
-    println!("{}", core::mem::size_of::<DrawInstruction>())
+    println!("{}", core::mem::size_of::<DrawInstruction>());
 }

@@ -1,7 +1,8 @@
 #![feature(trace_macros)]
 
-use embedded_gui::{arena::Arena, draw, primitive::Primitive, signal::Signal};
-use embedded_gui_macros::{Reactive, primitives};
+use bumpalo::Bump;
+use embedded_gui::{component::Component, draw, primitive::Primitive, signal::Signal};
+use embedded_gui_macros::{Reactive, widgets};
 
 #[derive(Reactive)]
 struct Button {
@@ -16,20 +17,46 @@ impl Primitive for Button {
     }
 }
 
-primitives! {
-    Primitives {
-        Button(Button)
+#[derive(Reactive)]
+struct Container {}
+
+impl<'a> Component<'a, Primitives<'a>, Components<'a>> for Container {
+    fn view(&self, bump: &Bump, children: embedded_gui::view::View<'a, Primitives, Components>) {
+        todo!()
     }
 }
 
+widgets! {
+    pub Primitives {
+        Button(Button)
+    }
+
+    pub Components {
+        Container(Container)
+    }
+}
+
+// macro_rules! view {
+//     ($bump:expr, $($constructor:ty $props:expr => [$($child:expr,)*]),*) => {
+//         $(
+//             if ::embedded_gui::signal::Reactive::has_changed($props) {
+
+//             } else {
+
+//             }
+//         )*
+//     };
+// }
+
 fn main() {
-    let mut arena = Arena::new();
-    let button = Primitives::new_Button(
-        &mut arena,
-        Button {
-            text: todo!(),
-            width: todo!(),
-            height: todo!(),
-        },
-    );
+    let bump = Bump::new();
+    // let button = button!(
+    //     &bump,
+    //     Button {
+    //         text: Signal::new("Hello".to_string()),
+    //         width: Signal::new(40),
+    //         height: Signal::new(40)
+    //     }
+    // );
+    // ::embedded_gui::view::Widget::Primitive<'a, Primitives, ()>(&button);
 }

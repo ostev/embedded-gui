@@ -8,7 +8,7 @@ use embedded_gui_macros::Reactive;
 use crate::{
     component::Component,
     draw,
-    layout::{Align, Direction, Layout, Position, Size, Sizing},
+    layout::{Direction, Layout, Position, Size, Sizing},
     primitive::Primitive,
     signal::Reactive,
 };

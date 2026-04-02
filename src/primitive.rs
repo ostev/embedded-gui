@@ -1,5 +1,9 @@
-use crate::{draw, signal::Reactive};
+use crate::{
+    draw,
+    layout::{IntrinsicSize, Layout, Size},
+    signal::Reactive,
+};
 
-pub trait Primitive: Reactive {
-    fn draw(&self, target: impl draw::Target);
+pub trait Primitive: Reactive + IntrinsicSize {
+    fn draw(&self, target: &mut draw::Target);
 }

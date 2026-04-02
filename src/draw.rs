@@ -1,1 +1,1 @@
-pub trait Target {}
+pub struct Target {}

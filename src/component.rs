@@ -1,9 +1,13 @@
 use bumpalo::Bump;
 
-use crate::{primitive::Primitive, signal::Reactive, view::View};
+use crate::{
+    draw,
+    layout::{IntrinsicSize, Layout, Size},
+    primitive::Primitive,
+    signal::Reactive,
+    view::{self, View, Widget},
+};
 
-pub trait Component<'a, P: Primitive, C>: Reactive {
-    fn view(&self, bump: &Bump, children: View<'a, P, Self>)
-    where
-        Self: Sized;
+pub trait Component<'a>: Reactive + IntrinsicSize {
+    fn view(&self, v: &view::Factory, children: &'a [Widget<'a>]) -> View<'a>;
 }

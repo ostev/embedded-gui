@@ -8,6 +8,10 @@ use crate::{
     view::{self, View, Widget},
 };
 
-pub trait Component<'a>: Reactive + IntrinsicSize {
-    fn view(&self, v: &view::Factory, children: &'a [Widget<'a>]) -> View<'a>;
+pub trait Component<'a, FocusState>: Reactive + IntrinsicSize {
+    fn view(
+        &self,
+        v: &view::Factory,
+        children: &'a [Widget<'a, FocusState>],
+    ) -> View<'a, FocusState>;
 }

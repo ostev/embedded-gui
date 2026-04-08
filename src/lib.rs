@@ -1,6 +1,9 @@
 #![no_std]
 
 extern crate alloc;
+extern crate self as embedded_gui;
+
+pub use embedded_gui_macros::Reactive;
 
 pub mod app;
 pub mod component;

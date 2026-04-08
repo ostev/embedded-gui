@@ -15,7 +15,7 @@ use crate::{
 
 enum ComplexWidgetVariant<'a, FocusState, Color: PixelColor> {
     Component(
-        &'a dyn Component<'a, FocusState, Color>,
+        &'a dyn Component<FocusState, Color>,
         &'a mut [Widget<'a, FocusState, Color>],
     ),
     Primitive(&'a dyn Primitive<Color>),
@@ -46,7 +46,7 @@ impl<'a, FocusState, Color: PixelColor> ComplexWidgetVariant<'a, FocusState, Col
 
     fn component<const N: usize>(
         bump: &'a Bump,
-        component: impl Component<'a, FocusState, Color> + 'a,
+        component: impl Component<FocusState, Color> + 'a,
         children: [Widget<'a, FocusState, Color>; N],
     ) -> Self {
         Self::Component(bump.alloc(component), bump.alloc(children))
@@ -54,7 +54,7 @@ impl<'a, FocusState, Color: PixelColor> ComplexWidgetVariant<'a, FocusState, Col
 
     fn component_ref(
         bump: &'a Bump,
-        component: impl Component<'a, FocusState, Color> + 'a,
+        component: impl Component<FocusState, Color> + 'a,
         children: &'a mut [Widget<'a, FocusState, Color>],
     ) -> Self {
         Self::Component(bump.alloc(component), children)
@@ -95,7 +95,7 @@ impl<'a, FocusState, Color: PixelColor> WidgetVariant<'a, FocusState, Color> {
 
     fn component<const N: usize>(
         bump: &'a Bump,
-        component: impl Component<'a, FocusState, Color> + 'a,
+        component: impl Component<FocusState, Color> + 'a,
         layout: Layout,
         children: [Widget<'a, FocusState, Color>; N],
     ) -> Self {
@@ -109,31 +109,31 @@ impl<'a, FocusState, Color: PixelColor> WidgetVariant<'a, FocusState, Color> {
 
 pub struct Widget<'a, FocusState, Color: PixelColor>(WidgetVariant<'a, FocusState, Color>);
 
-pub struct Factory<'a> {
-    pub bump: &'a Bump,
+pub struct Factory {
+    pub bump: Bump,
 }
-impl<'a> Factory<'a> {
-    pub fn component<const N: usize, FocusState, Color: PixelColor>(
-        &self,
-        component: impl Component<'a, FocusState, Color> + 'a,
+impl Factory {
+    pub fn component<'a, const N: usize, FocusState, Color: PixelColor>(
+        &'a self,
+        component: impl Component<FocusState, Color> + 'a,
         layout: Layout,
         children: [Widget<'a, FocusState, Color>; N],
     ) -> Widget<'a, FocusState, Color> {
         Widget(WidgetVariant::component(
-            self.bump, component, layout, children,
+            &self.bump, component, layout, children,
         ))
     }
 
-    pub fn primitive<FocusState, Color: PixelColor>(
-        &self,
+    pub fn primitive<'a, FocusState, Color: PixelColor>(
+        &'a self,
         primitive: impl Primitive<Color> + 'a,
         layout: Layout,
     ) -> Widget<'a, FocusState, Color> {
-        Widget(WidgetVariant::primitive(self.bump, primitive, layout))
+        Widget(WidgetVariant::primitive(&self.bump, primitive, layout))
     }
 
-    pub fn view<const N: usize, FocusState, Color: PixelColor>(
-        &self,
+    pub fn view<'a, const N: usize, FocusState, Color: PixelColor>(
+        &'a self,
         layout: Layout,
         children: [Widget<'a, FocusState, Color>; N],
     ) -> View<'a, FocusState, Color> {
@@ -143,7 +143,7 @@ impl<'a> Factory<'a> {
         }
     }
 
-    pub fn view_ref<FocusState, Color: PixelColor>(
+    pub fn view_ref<'a, FocusState, Color: PixelColor>(
         &self,
         layout: Layout,
         children: &'a mut [Widget<'a, FocusState, Color>],
@@ -189,7 +189,7 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
         available_space: Size,
         focus_key: interactive::Key,
         focus_state: &FocusState,
-    ) -> Size {
+    ) -> Option<Size> {
         let reduce_fill_space = Self::reduce_fill_space(&self.layout);
 
         let (num_fill, fill_space) = self.widgets.iter_mut().fold(
@@ -230,18 +230,22 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
             },
         );
 
-        let size_per_widget = fill_space
-            / match self.layout.direction {
-                Direction::Horizontal => Size::new(num_fill, 1),
-                Direction::Vertical => Size::new(1, num_fill),
-            };
-
-        size_per_widget
+        if num_fill > 0 {
+            Some(
+                fill_space
+                    / match self.layout.direction {
+                        Direction::Horizontal => Size::new(num_fill, 1),
+                        Direction::Vertical => Size::new(1, num_fill),
+                    },
+            )
+        } else {
+            None
+        }
     }
 
     pub(crate) fn render<T: embedded_graphics::draw_target::DrawTarget<Color = Color>>(
         mut self,
-        factory: &Factory<'a>,
+        factory: &'a Factory,
         background: Color,
         available_space: Size,
         focus_key: interactive::Key,
@@ -249,8 +253,9 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
         has_focus_changed: bool,
         target: &mut T,
     ) -> Result<SizedView<'a, FocusState, Color>, T::Error> {
-        let size_per_widget =
-            self.compute_size_per_widget(factory.bump, available_space, focus_key, focus_state);
+        let size_per_widget = self
+            .compute_size_per_widget(&factory.bump, available_space, focus_key, focus_state)
+            .unwrap_or(Size::zero());
         let adjust_position = Self::adjust_position(&self.layout);
 
         let mut position = Position::zero();

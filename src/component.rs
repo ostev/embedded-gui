@@ -6,8 +6,8 @@ use crate::{
     view::{self, View, Widget},
 };
 
-pub trait Component<'a, FocusState, Color: PixelColor>: Reactive + IntrinsicSize {
-    fn view(
+pub trait Component<FocusState, Color: PixelColor>: Reactive + IntrinsicSize {
+    fn view<'a>(
         &self,
         v: &view::Factory,
         children: &[Widget<'a, FocusState, Color>],

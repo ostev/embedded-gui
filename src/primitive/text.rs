@@ -1,0 +1,51 @@
+use bumpalo::collections::String;
+use embedded_graphics::{
+    Drawable,
+    mono_font::{self, MonoTextStyle},
+    prelude::{PixelColor, Point},
+    text::{Alignment, LineHeight, TextStyleBuilder},
+};
+use embedded_gui_macros::Reactive;
+
+use crate::{
+    layout::IntrinsicSize,
+    primitive::Primitive,
+    signal::{Reactive, Signal, SignalRef},
+    size::Size,
+};
+
+pub struct Text<'model, Color: PixelColor, S: AsRef<str>> {
+    pub content: SignalRef<'model, S>,
+    pub font_style: SignalRef<'model, MonoTextStyle<'static, Color>>,
+}
+
+impl<'model, 'a, Color: PixelColor, S: AsRef<str>> Reactive for Text<'model, Color, S> {
+    fn has_changed(&self) -> bool {
+        true
+    }
+}
+
+impl<'model, 'a, Color: PixelColor, S: AsRef<str>> IntrinsicSize for Text<'model, Color, S> {
+    fn intrinsic_size(&self) -> Size {
+        let character_size: Size = self.font_style.font.character_size.into();
+        let n_chars = self.content.as_ref().chars().count();
+        let size = Size::new(character_size.width * n_chars as u16, character_size.height);
+        size
+    }
+}
+
+impl<'model, 'a, Color: PixelColor, S: AsRef<str>> Primitive<Color> for Text<'model, Color, S> {
+    fn draw(&self, target: &mut crate::draw::LocalTarget<Color>) {
+        let text_style = TextStyleBuilder::new()
+            .alignment(Alignment::Left)
+            .baseline(embedded_graphics::text::Baseline::Top)
+            .build();
+        let Ok(_) = embedded_graphics::text::Text::with_text_style(
+            self.content.as_ref(),
+            Point::zero(),
+            *self.font_style,
+            text_style,
+        )
+        .draw(target);
+    }
+}

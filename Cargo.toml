@@ -10,6 +10,7 @@ embedded_gui_macros = { path = "embedded_gui_macros" }
 bumpalo = { version = "3.20.2", features = ["boxed", "collections"] }
 hashbrown = "0.16.1"
 itertools = { version = "0.14.0", features = [] }
+embedded-graphics-simulator = "0.7.0"
 
 [[example]]
 name = "font-rendering"

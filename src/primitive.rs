@@ -1,9 +1,7 @@
-use crate::{
-    draw,
-    layout::{IntrinsicSize, Layout, Size},
-    signal::Reactive,
-};
+use embedded_graphics::prelude::PixelColor;
 
-pub trait Primitive: Reactive + IntrinsicSize {
-    fn draw(&self, target: &mut draw::Target);
+use crate::{draw, layout::IntrinsicSize, signal::Reactive, size::Size};
+
+pub trait Primitive<Color: PixelColor>: Reactive + IntrinsicSize {
+    fn draw(&self, target: &mut draw::LocalTarget<Color>);
 }

@@ -1,17 +1,18 @@
 use bumpalo::Bump;
+use embedded_graphics::prelude::PixelColor;
 
 use crate::{
     draw,
-    layout::{IntrinsicSize, Layout, Size},
+    layout::{IntrinsicSize, Layout},
     primitive::Primitive,
     signal::Reactive,
-    view::{self, View, Widget},
+    view::{self, View, WidgetVariant},
 };
 
-pub trait Component<'a, FocusState>: Reactive + IntrinsicSize {
+pub trait Component<'a, FocusState, Color: PixelColor>: Reactive + IntrinsicSize {
     fn view(
         &self,
         v: &view::Factory,
-        children: &'a [Widget<'a, FocusState>],
-    ) -> View<'a, FocusState>;
+        children: &[WidgetVariant<'a, FocusState, Color>],
+    ) -> View<'a, FocusState, Color>;
 }

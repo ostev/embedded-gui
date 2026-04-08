@@ -2,9 +2,8 @@ use core::u16;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use hashbrown::HashMap;
 
-use crate::layout::Position;
+use crate::position::Position;
 
 pub type Key = usize;
 
@@ -108,8 +107,8 @@ impl FocusOrder {
 
 #[derive(Clone, Copy)]
 pub(crate) struct FocusItem {
-    position: Position,
-    key: Key,
+    pub(crate) position: Position,
+    pub(crate) key: Key,
 }
 
 pub(crate) type Index = u16;

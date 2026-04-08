@@ -1,37 +1,14 @@
+use core::convert::Infallible;
+
 use alloc::vec;
 use alloc::vec::Vec;
 use bumpalo::Bump;
-use embedded_graphics::prelude::{DrawTargetExt, PixelColor};
+use embedded_graphics::Pixel;
+use embedded_graphics::prelude::{DrawTarget, DrawTargetExt, OriginDimensions, PixelColor, Point};
 use embedded_graphics::primitives::Rectangle;
 
 use crate::position::Position;
 use crate::size::Size;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Pixel<Color: PixelColor> {
-    pub position: Position,
-    pub color: Color,
-}
-
-impl<Color: PixelColor> Pixel<Color> {
-    pub fn new(position: Position, color: Color) -> Self {
-        Self { position, color }
-    }
-
-    pub fn with_position(self, position: Position) -> Self {
-        Self {
-            position,
-            color: self.color,
-        }
-    }
-
-    pub fn with_color(self, color: Color) -> Self {
-        Self {
-            position: self.position,
-            color: color,
-        }
-    }
-}
 
 pub(crate) struct TargetStore<Color: PixelColor> {
     buffer: Vec<Color>,
@@ -80,22 +57,20 @@ impl<'a, Color: PixelColor> LocalTarget<'a, Color> {
     }
 
     pub fn draw(&mut self, pixel: Pixel<Color>) {
-        let clamped = self.bottom_right.min(pixel.position) + self.position;
+        let positive_x = pixel.0.x.max(0);
+        let positive_y = pixel.0.y.max(0);
+        let clamped = self
+            .bottom_right
+            .min(Position::new(positive_x as u16, positive_y as u16));
 
-        let row_offset = clamped.x as usize * self.width;
-        let column_offset = clamped.y as usize;
-        self.buffer[row_offset + column_offset] = pixel.color;
-    }
-
-    pub fn draw_iter(&mut self, pixels: impl Iterator<Item = Pixel<Color>>) {
-        pixels.for_each(|pixel| self.draw(pixel));
+        self.buffer[(clamped.x as usize) + (clamped.y as usize) * self.width] = pixel.1;
     }
 
     pub fn size(&self) -> Size {
         self.size
     }
 
-    pub fn blit<T: embedded_graphics::draw_target::DrawTarget<Color = Color>>(
+    pub(crate) fn blit<T: embedded_graphics::draw_target::DrawTarget<Color = Color>>(
         self,
         target: &mut T,
     ) -> Result<(), T::Error> {
@@ -103,5 +78,48 @@ impl<'a, Color: PixelColor> LocalTarget<'a, Color> {
             &Rectangle::new(self.position.into(), self.size.into()),
             self.buffer,
         )
+    }
+}
+
+impl<'a, Color: PixelColor> OriginDimensions for LocalTarget<'a, Color> {
+    fn size(&self) -> embedded_graphics::prelude::Size {
+        self.size.into()
+    }
+}
+
+impl<'a, Color: PixelColor> DrawTarget for LocalTarget<'a, Color> {
+    type Color = Color;
+
+    type Error = Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>>,
+    {
+        pixels.into_iter().for_each(|pixel| self.draw(pixel));
+
+        Ok(())
+    }
+
+    fn fill_contiguous<I>(&mut self, area: &Rectangle, colors: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Self::Color>,
+    {
+        todo!()
+        // self.draw_iter(
+        //     area.points()
+        //         .zip(colors)
+        //         .map(|(pos, color)| embedded_graphics::Pixel(pos, color)),
+        // )
+    }
+
+    fn fill_solid(&mut self, area: &Rectangle, color: Self::Color) -> Result<(), Self::Error> {
+        self.fill_contiguous(area, core::iter::repeat(color))
+    }
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        self.buffer.fill(color);
+
+        Ok(())
     }
 }

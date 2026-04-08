@@ -85,15 +85,6 @@ pub enum WidgetVariant<'a, FocusState, Color: PixelColor> {
 }
 
 impl<'a, FocusState, Color: PixelColor> WidgetVariant<'a, FocusState, Color> {
-    fn has_changed(&self, has_focus_key_changed: bool) -> bool {
-        match self {
-            WidgetVariant::Complex(complex) => complex.inner.has_changed(),
-            // Since an interactive widget is **always** the child of a component,
-            // any state changes will be tracked by its parent.
-            WidgetVariant::Interactive(_) => has_focus_key_changed,
-        }
-    }
-
     fn primitive(bump: &'a Bump, primitive: impl Primitive<Color> + 'a, layout: Layout) -> Self {
         WidgetVariant::Complex(ComplexWidget {
             inner: ComplexWidgetVariant::primitive(bump, primitive),

@@ -1,5 +1,5 @@
+use crate::Reactive;
 use embedded_graphics::prelude::PixelColor;
-use embedded_gui_macros::Reactive;
 
 use crate::{
     layout::IntrinsicSize,
@@ -11,6 +11,14 @@ use crate::{
 #[derive(Reactive)]
 pub struct Spacer<'model> {
     pub size: SignalRef<'model, Size>,
+}
+
+impl<'model> Spacer<'model> {
+    pub fn zero() -> Self {
+        Self {
+            size: SignalRef::owned(Size::zero()),
+        }
+    }
 }
 
 impl<'model> IntrinsicSize for Spacer<'model> {

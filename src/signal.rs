@@ -1,5 +1,8 @@
 use core::{fmt::Debug, ops::Deref};
 
+use alloc::rc::Rc;
+use bumpalo::{Bump, boxed::Box};
+
 pub trait Reactive {
     fn has_changed(&self) -> bool;
 }
@@ -66,36 +69,45 @@ impl<T: Debug> Debug for Signal<T> {
     }
 }
 
-pub enum SignalRef<'a, T> {
-    Owned(Signal<T>),
-    Borrowed(&'a Signal<T>),
+pub enum SignalRef<'model, T> {
+    Owned(Rc<Signal<T>>),
+    Borrowed(&'model Signal<T>),
 }
 
-impl<'a, T> SignalRef<'a, T> {
+impl<'model, T> SignalRef<'model, T> {
     pub fn owned(value: T) -> Self {
-        Self::Owned(Signal {
+        Self::Owned(Rc::new(Signal {
             value,
             has_changed: false,
-        })
+        }))
     }
 }
 
-impl<'a, T> Reactive for SignalRef<'a, T> {
+impl<'model, T> Reactive for SignalRef<'model, T> {
     fn has_changed(&self) -> bool {
         match self {
-            Self::Owned(signal) => signal.has_changed(),
+            Self::Owned(_) => false,
             Self::Borrowed(signal) => signal.has_changed(),
         }
     }
 }
 
-impl<'a, T> Deref for SignalRef<'a, T> {
+impl<'model, T> Deref for SignalRef<'model, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         match self {
             Self::Owned(signal) => &signal.value,
             Self::Borrowed(signal) => &signal.value,
+        }
+    }
+}
+
+impl<'model, T> Clone for SignalRef<'model, T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Owned(signal) => Self::Owned(signal.clone()),
+            Self::Borrowed(signal) => Self::Borrowed(signal),
         }
     }
 }

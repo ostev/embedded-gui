@@ -7,26 +7,27 @@ use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Windo
 use embedded_gui::{
     Reactive,
     app::{self, App},
-    layout::{Direction, Layout, Sizing},
+    component::button::Button,
+    layout::{Direction, Sizing},
     primitive::text::Text,
     signal::{Signal, SignalRef},
+    size::Size,
 };
 
 #[derive(Reactive)]
 struct MyApp {
     text: Signal<String>,
+    font_style: Signal<MonoTextStyle<'static, Rgb888>>,
 }
 
 enum Msg {}
 
 impl App for MyApp {
-    type FocusState = ();
-
     type Color = Rgb888;
     type Msg = Msg;
 
-    fn default_focus_state() -> Self::FocusState {
-        ()
+    fn default_focus_state() -> embedded_gui::interactive::FocusState {
+        embedded_gui::interactive::FocusState::Unfocused
     }
 
     fn background_color() -> Self::Color {
@@ -34,9 +35,10 @@ impl App for MyApp {
     }
 
     fn init() -> Self {
-        let mut text = Signal::new("Hello".to_string());
-        text.set("Hi!!".to_string());
-        Self { text }
+        Self {
+            text: Signal::new("Hi".to_string()),
+            font_style: Signal::new(MonoTextStyle::new(&FONT_10X20, Rgb888::RED)),
+        }
     }
 
     fn update(&mut self, msg: Self::Msg) {}
@@ -44,23 +46,34 @@ impl App for MyApp {
     fn view<'a>(
         &'a self,
         v: &'a embedded_gui::view::Factory,
-    ) -> embedded_gui::view::View<'a, Self::FocusState, Self::Color> {
+    ) -> embedded_gui::view::View<'a, Self::Color> {
         v.view(
-            Layout::new(Sizing::Fill, Direction::Horizontal),
+            Direction::Horizontal,
             [
-                v.primitive(
-                    Text {
-                        content: self.text.to_ref(),
-                        font_style: SignalRef::owned(MonoTextStyle::new(&FONT_10X20, Rgb888::RED)),
+                // v.spacer(),
+                // v.primitive(
+                //     Sizing::Intrinsic,
+                //     Text {
+                //         content: self.text.to_ref(),
+                //         font_style: self.font_style.to_ref(),
+                //     },
+                // ),
+                // v.spacer(),
+                v.component(
+                    Sizing::Intrinsic,
+                    Button {
+                        text: SignalRef::owned("Say hi!"),
+                        font_style: self.font_style.to_ref(),
+                        background_color: SignalRef::owned(Rgb888::BLUE),
+                        size: SignalRef::owned(Size::new(128, 32)),
                     },
-                    Layout::new(Sizing::Fill, Direction::Horizontal),
-                ),
-                v.primitive(
-                    Text {
-                        content: self.text.to_ref(),
-                        font_style: SignalRef::owned(MonoTextStyle::new(&FONT_10X20, Rgb888::RED)),
-                    },
-                    Layout::new(Sizing::Intrinsic, Direction::Horizontal),
+                    [v.primitive(
+                        Sizing::Intrinsic,
+                        Text {
+                            content: self.text.to_ref(),
+                            font_style: self.font_style.to_ref(),
+                        },
+                    )],
                 ),
             ],
         )
@@ -69,7 +82,7 @@ impl App for MyApp {
 
 fn main() {
     let mut display =
-        SimulatorDisplay::<Rgb888>::new(embedded_graphics::prelude::Size::new(400, 64));
+        SimulatorDisplay::<Rgb888>::new(embedded_graphics::prelude::Size::new(400, 400));
 
     app::start(MyApp::init(), &mut display).unwrap();
 

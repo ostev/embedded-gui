@@ -4,7 +4,6 @@ use embedded_graphics::prelude::{DrawTarget, PixelColor};
 
 use crate::{
     interactive,
-    signal::Reactive,
     view::{self, View},
 };
 

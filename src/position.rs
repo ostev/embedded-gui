@@ -57,18 +57,6 @@ impl core::ops::Div for Position {
     }
 }
 
-impl core::cmp::Ord for Position {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.x.cmp(&other.x).then(self.y.cmp(&other.y))
-    }
-}
-
-impl core::cmp::PartialOrd for Position {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 impl From<embedded_graphics::prelude::Point> for Position {
     fn from(value: embedded_graphics::prelude::Point) -> Self {
         Position::new(value.x as u16, value.y as u16)

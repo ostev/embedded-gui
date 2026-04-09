@@ -1,4 +1,5 @@
 use core::convert::Infallible;
+use std::marker::PhantomData;
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -27,43 +28,42 @@ impl<Color: PixelColor> TargetStore<Color> {
 }
 
 pub struct LocalTarget<'a, Color: PixelColor> {
-    buffer: bumpalo::collections::Vec<'a, Color>,
+    buffer: Vec<Color>,
     position: Position,
     width: usize,
     size: Size,
     bottom_right: Position,
+    phantom: PhantomData<&'a ()>,
 }
 
 impl<'a, Color: PixelColor> LocalTarget<'a, Color> {
     /// Creates a new draw target. If the provided size is zero in either dimension,
     /// it returns `None` instead.
-    pub(crate) fn try_new(
-        bump: &'a Bump,
-        background: Color,
-        position: Position,
-        size: Size,
-    ) -> Option<Self> {
+    pub(crate) fn try_new(background: Color, position: Position, size: Size) -> Option<Self> {
         size.bottom_right().map(|bottom_right| {
             let width: usize = size.width.into();
             let height: usize = size.height.into();
             Self {
-                buffer: bumpalo::vec![in bump; background; width * height],
+                buffer: alloc::vec![background; width * height],
                 position,
                 width,
                 size,
                 bottom_right,
+                phantom: PhantomData,
             }
         })
     }
 
     pub fn draw(&mut self, pixel: Pixel<Color>) {
-        let positive_x = pixel.0.x.max(0);
-        let positive_y = pixel.0.y.max(0);
-        let clamped = self
-            .bottom_right
-            .min(Position::new(positive_x as u16, positive_y as u16));
+        let clamped_x = pixel.0.x.clamp(0, self.bottom_right.x as i32);
+        let clamped_y = pixel.0.y.clamp(0, self.bottom_right.y as i32);
 
-        self.buffer[(clamped.x as usize) + (clamped.y as usize) * self.width] = pixel.1;
+        println!("{:?}", self.size);
+        println!("{:?}", self.bottom_right);
+        println!("{:?}", pixel.0);
+        println!("({}, {})", clamped_x, clamped_y);
+
+        self.buffer[(clamped_x as usize) + (clamped_y as usize) * self.width] = pixel.1;
     }
 
     pub fn size(&self) -> Size {

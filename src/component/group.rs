@@ -15,6 +15,15 @@ pub struct Group<'model> {
     size: SignalRef<'model, Size>,
 }
 
+impl<'model> Group<'model> {
+    pub fn zero(direction: SignalRef<'model, Direction>) -> Self {
+        Self {
+            size: SignalRef::owned(Size::zero()),
+            direction,
+        }
+    }
+}
+
 impl<'model> IntrinsicSize for Group<'model> {
     fn intrinsic_size(&self) -> crate::size::Size {
         *self.size

@@ -3,28 +3,20 @@ use bumpalo::Bump;
 use embedded_graphics::prelude::PixelColor;
 
 use crate::{
-    component::Component,
+    background::{Background, Layer},
+    component::{Component, group::Group},
     draw::{self, LocalTarget},
     interactive::{self, FocusItem, FocusState},
     layout::{Direction, Sizing},
     position::Position,
-    primitive::{Primitive, spacer::Spacer},
-    signal::Reactive,
+    primitive::{Primitive, spacer::Spacer, text::Text},
+    signal::{Reactive, SignalRef},
     size::Size,
 };
 
 enum ComplexWidgetVariant<'a, Color: PixelColor> {
     Component(&'a dyn Component<'a, Color>, &'a mut [Widget<'a, Color>]),
     Primitive(&'a dyn Primitive<Color>),
-}
-
-impl<'a, Color: PixelColor> Reactive for ComplexWidgetVariant<'a, Color> {
-    fn has_changed(&self) -> bool {
-        match self {
-            ComplexWidgetVariant::Component(component, _) => component.has_changed(),
-            ComplexWidgetVariant::Primitive(primitive) => primitive.has_changed(),
-        }
-    }
 }
 
 impl<'a, Color: PixelColor> ComplexWidgetVariant<'a, Color> {
@@ -37,6 +29,25 @@ impl<'a, Color: PixelColor> ComplexWidgetVariant<'a, Color> {
 }
 
 impl<'a, Color: PixelColor> ComplexWidgetVariant<'a, Color> {
+    /// Determines whether a complex widget variant has changed and needs
+    /// to be updated.
+    ///
+    /// ## Safety notes
+    /// It is the caller's responsibility to ensure that this
+    /// widget has been evaluated if it is interactive. If called after the
+    /// initial sizing pass, this will be the case.
+    unsafe fn has_changed(&self, has_focus_changed: bool) -> bool {
+        match self {
+            ComplexWidgetVariant::Component(component, children) => {
+                component.has_changed()
+                    || children
+                        .iter()
+                        .any(|Widget(widget)| unsafe { widget.has_changed(has_focus_changed) })
+            }
+            ComplexWidgetVariant::Primitive(primitive) => primitive.has_changed(),
+        }
+    }
+
     fn primitive(bump: &'a Bump, primitive: impl Primitive<Color> + 'a) -> Self {
         Self::Primitive(bump.alloc(primitive))
     }
@@ -82,6 +93,22 @@ enum WidgetVariant<'a, Color: PixelColor> {
 }
 
 impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
+    /// Determines whether a widget variant has changed and needs to be updated.
+    ///
+    /// ## Safety notes
+    /// It is the caller's responsibility to ensure that this
+    /// widget has been evaluated if it is interactive. If called after the
+    /// initial sizing pass, this will be the case.
+    unsafe fn has_changed(&self, has_focus_changed: bool) -> bool {
+        match self {
+            Self::Complex(complex) => unsafe { complex.inner.has_changed(has_focus_changed) },
+            Self::Interactive(interactive) => {
+                let complex = unsafe { interactive.evaluated.as_deref().unwrap_unchecked() };
+                has_focus_changed || unsafe { complex.inner.has_changed(has_focus_changed) }
+            }
+        }
+    }
+
     fn primitive(bump: &'a Bump, primitive: impl Primitive<Color> + 'a, sizing: Sizing) -> Self {
         WidgetVariant::Complex(ComplexWidget {
             inner: ComplexWidgetVariant::primitive(bump, primitive),
@@ -102,6 +129,19 @@ impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
             size: Size::zero(),
         })
     }
+
+    fn component_ref(
+        bump: &'a Bump,
+        component: impl Component<'a, Color> + 'a,
+        sizing: Sizing,
+        children: &'a mut [Widget<'a, Color>],
+    ) -> Self {
+        WidgetVariant::Complex(ComplexWidget {
+            inner: ComplexWidgetVariant::component_ref(bump, component, children),
+            sizing,
+            size: Size::zero(),
+        })
+    }
 }
 
 pub struct Widget<'a, Color: PixelColor>(WidgetVariant<'a, Color>);
@@ -112,11 +152,21 @@ pub struct Factory {
 impl Factory {
     pub fn component<'a, const N: usize, Color: PixelColor>(
         &'a self,
-        component: impl Component<'a, Color> + 'a,
         sizing: Sizing,
+        component: impl Component<'a, Color> + 'a,
         children: [Widget<'a, Color>; N],
     ) -> Widget<'a, Color> {
         Widget(WidgetVariant::component(
+            &self.bump, component, sizing, children,
+        ))
+    }
+    pub fn component_ref<'a, Color: PixelColor>(
+        &'a self,
+        sizing: Sizing,
+        component: impl Component<'a, Color> + 'a,
+        children: &'a mut [Widget<'a, Color>],
+    ) -> Widget<'a, Color> {
+        Widget(WidgetVariant::component_ref(
             &self.bump, component, sizing, children,
         ))
     }
@@ -137,6 +187,7 @@ impl Factory {
         View {
             widgets: self.bump.alloc(children),
             direction,
+            background: None,
         }
     }
 
@@ -148,6 +199,7 @@ impl Factory {
         View {
             widgets: children,
             direction,
+            background: None,
         }
     }
 
@@ -155,25 +207,58 @@ impl Factory {
         self.primitive(Sizing::Fill, Spacer::zero())
     }
 
-    // pub fn centered<'a, Color: PixelColor>(&'a self) -> Widget<'a, Color> {
-    //     self.view(
-    //         Direction::Horizontal,
-    //         [
-    //             primitive(Sizing::Fill, Spacer::zero()),
-    //             v.primitive(
-    //                 Sizing::Fill,
-    //                 Text {
-    //                     content: self.text.clone(),
-    //                     font_style: self.font_style.clone(),
-    //                 },
-    //             ),
-    //             v.primitive(Sizing::Fill, Spacer::zero()),
-    //         ],
-    //     )
-    // }
+    pub fn group<'a, const N: usize, Color: PixelColor>(
+        &'a self,
+        direction: Direction,
+        children: [Widget<'a, Color>; N],
+    ) -> Widget<'a, Color> {
+        self.component(
+            Sizing::Fill,
+            Group::zero(SignalRef::owned(direction)),
+            children,
+        )
+    }
+
+    pub fn group_ref<'a, Color: PixelColor>(
+        &'a self,
+        direction: Direction,
+        children: &'a mut [Widget<'a, Color>],
+    ) -> Widget<'a, Color> {
+        self.component_ref(
+            Sizing::Fill,
+            Group::zero(SignalRef::owned(direction)),
+            children,
+        )
+    }
+
+    pub fn centered<'a, Color: PixelColor>(
+        &'a self,
+        direction: Direction,
+        widget: Widget<'a, Color>,
+    ) -> Widget<'a, Color> {
+        self.group(direction, [self.spacer(), widget, self.spacer()])
+    }
+
+    pub fn middle<'a, Color: PixelColor>(&'a self, widget: Widget<'a, Color>) -> Widget<'a, Color> {
+        self.centered(
+            Direction::Vertical,
+            self.centered(Direction::Horizontal, widget),
+        )
+    }
+
+    pub fn background<'a, Color: PixelColor>(
+        &'a self,
+        background: Color,
+        mut view: View<'a, Color>,
+    ) -> View<'a, Color> {
+        view.background = Some(background);
+
+        view
+    }
 }
 
 pub struct View<'a, Color: PixelColor> {
+    background: Option<Color>,
     widgets: &'a mut [Widget<'a, Color>],
     direction: Direction,
 }
@@ -291,15 +376,14 @@ impl<'a, Color: PixelColor> View<'a, Color> {
         };
 
         for Widget(widget) in self.widgets.iter_mut() {
-            let (has_changed, widget_position, complex) = match widget {
-                WidgetVariant::Complex(complex) => (
-                    complex.inner.has_changed(),
-                    update_position(complex),
-                    complex,
-                ),
+            // Safety notes: this *should* be safe since we have explicitly set the
+            // evaluated view during the previous pass.
+            let has_changed = unsafe { widget.has_changed(has_focus_changed) };
+
+            let (widget_position, complex) = match widget {
+                WidgetVariant::Complex(complex) => (update_position(complex), complex),
                 WidgetVariant::Interactive(interactive) => {
-                    // Safety notes: this *should* be safe since we have explicitly set the
-                    // evaluated view during the previous pass.
+                    // Safety notes: same as above
                     let complex =
                         unsafe { interactive.evaluated.as_deref_mut().unwrap_unchecked() };
                     let widget_position = update_position(complex);
@@ -309,44 +393,40 @@ impl<'a, Color: PixelColor> View<'a, Color> {
                         key: interactive.key,
                     });
 
-                    (
-                        has_focus_changed || complex.inner.has_changed(),
-                        widget_position,
-                        complex,
-                    )
+                    (widget_position, complex)
                 }
             };
 
-            let framebuffer_arena = Bump::new();
-
             if has_changed {
-                match LocalTarget::try_new(
-                    &framebuffer_arena,
-                    background,
-                    widget_position,
-                    complex.size,
-                ) {
-                    Some(mut local_target) => match &mut complex.inner {
-                        ComplexWidgetVariant::Component(component, children) => {
-                            let view = component.view(factory, children);
-                            let view_focus_items = view.render(
-                                factory,
-                                background,
-                                complex.size,
-                                focus_key,
-                                focus_state,
-                                has_focus_changed,
-                                target,
-                            )?;
+                match &mut complex.inner {
+                    ComplexWidgetVariant::Component(component, children) => {
+                        let view = component.view(factory, children);
 
-                            focus_items.extend(view_focus_items);
+                        let view_focus_items = view.render(
+                            factory,
+                            self.background.unwrap_or(background),
+                            complex.size,
+                            focus_key,
+                            focus_state,
+                            has_focus_changed,
+                            target,
+                        )?;
+
+                        focus_items.extend(view_focus_items);
+                    }
+                    ComplexWidgetVariant::Primitive(primitive) => {
+                        match LocalTarget::try_new(
+                            self.background.unwrap_or(background),
+                            widget_position,
+                            complex.size,
+                        ) {
+                            Some(mut local_target) => {
+                                primitive.draw(&mut local_target);
+                                local_target.blit(target)?
+                            }
+                            None => {}
                         }
-                        ComplexWidgetVariant::Primitive(primitive) => {
-                            primitive.draw(&mut local_target);
-                            local_target.blit(target)?
-                        }
-                    },
-                    None => {}
+                    }
                 }
             }
         }

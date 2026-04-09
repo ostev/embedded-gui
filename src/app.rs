@@ -9,16 +9,15 @@ use crate::{
 };
 
 pub trait App {
-    type FocusState;
     type Color: PixelColor;
     type Msg;
 
     fn init() -> Self;
 
-    fn default_focus_state() -> Self::FocusState;
+    fn default_focus_state() -> interactive::FocusState;
     fn background_color() -> Self::Color;
     fn update(&mut self, msg: Self::Msg);
-    fn view<'a>(&'a self, v: &'a view::Factory) -> View<'a, Self::FocusState, Self::Color>;
+    fn view<'a>(&'a self, v: &'a view::Factory) -> View<'a, Self::Color>;
 }
 
 pub fn start<'a, A: App, D: DrawTarget<Color = A::Color>>(

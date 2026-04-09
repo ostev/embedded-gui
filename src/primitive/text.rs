@@ -1,3 +1,4 @@
+use crate::Reactive;
 use bumpalo::collections::String;
 use embedded_graphics::{
     Drawable,
@@ -5,7 +6,6 @@ use embedded_graphics::{
     prelude::{PixelColor, Point},
     text::{Alignment, LineHeight, TextStyleBuilder},
 };
-use embedded_gui_macros::Reactive;
 
 use crate::{
     layout::IntrinsicSize,

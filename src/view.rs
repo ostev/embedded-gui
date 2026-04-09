@@ -5,23 +5,20 @@ use embedded_graphics::prelude::PixelColor;
 use crate::{
     component::Component,
     draw::{self, LocalTarget},
-    interactive::{self, FocusItem},
-    layout::{Direction, Layout, Sizing},
+    interactive::{self, FocusItem, FocusState},
+    layout::{Direction, Sizing},
     position::Position,
-    primitive::Primitive,
+    primitive::{Primitive, spacer::Spacer},
     signal::Reactive,
     size::Size,
 };
 
-enum ComplexWidgetVariant<'a, FocusState, Color: PixelColor> {
-    Component(
-        &'a dyn Component<FocusState, Color>,
-        &'a mut [Widget<'a, FocusState, Color>],
-    ),
+enum ComplexWidgetVariant<'a, Color: PixelColor> {
+    Component(&'a dyn Component<'a, Color>, &'a mut [Widget<'a, Color>]),
     Primitive(&'a dyn Primitive<Color>),
 }
 
-impl<'a, FocusState, Color: PixelColor> Reactive for ComplexWidgetVariant<'a, FocusState, Color> {
+impl<'a, Color: PixelColor> Reactive for ComplexWidgetVariant<'a, Color> {
     fn has_changed(&self) -> bool {
         match self {
             ComplexWidgetVariant::Component(component, _) => component.has_changed(),
@@ -30,7 +27,7 @@ impl<'a, FocusState, Color: PixelColor> Reactive for ComplexWidgetVariant<'a, Fo
     }
 }
 
-impl<'a, FocusState, Color: PixelColor> ComplexWidgetVariant<'a, FocusState, Color> {
+impl<'a, Color: PixelColor> ComplexWidgetVariant<'a, Color> {
     fn intrinsic_size(&self) -> Size {
         match self {
             ComplexWidgetVariant::Component(component, _) => component.intrinsic_size(),
@@ -39,130 +36,151 @@ impl<'a, FocusState, Color: PixelColor> ComplexWidgetVariant<'a, FocusState, Col
     }
 }
 
-impl<'a, FocusState, Color: PixelColor> ComplexWidgetVariant<'a, FocusState, Color> {
+impl<'a, Color: PixelColor> ComplexWidgetVariant<'a, Color> {
     fn primitive(bump: &'a Bump, primitive: impl Primitive<Color> + 'a) -> Self {
         Self::Primitive(bump.alloc(primitive))
     }
 
     fn component<const N: usize>(
         bump: &'a Bump,
-        component: impl Component<FocusState, Color> + 'a,
-        children: [Widget<'a, FocusState, Color>; N],
+        component: impl Component<'a, Color> + 'a,
+        children: [Widget<'a, Color>; N],
     ) -> Self {
         Self::Component(bump.alloc(component), bump.alloc(children))
     }
 
     fn component_ref(
         bump: &'a Bump,
-        component: impl Component<FocusState, Color> + 'a,
-        children: &'a mut [Widget<'a, FocusState, Color>],
+        component: impl Component<'a, Color> + 'a,
+        children: &'a mut [Widget<'a, Color>],
     ) -> Self {
         Self::Component(bump.alloc(component), children)
     }
 }
 
-struct ComplexWidget<'a, FocusState, Color: PixelColor> {
-    inner: ComplexWidgetVariant<'a, FocusState, Color>,
-    layout: Layout,
+struct ComplexWidget<'a, Color: PixelColor> {
+    inner: ComplexWidgetVariant<'a, Color>,
+    sizing: Sizing,
     size: Size,
 }
 
-impl<'a, FocusState, Color: PixelColor> ComplexWidget<'a, FocusState, Color> {
+impl<'a, Color: PixelColor> ComplexWidget<'a, Color> {
     fn intrinsic_size(&self) -> Size {
         self.inner.intrinsic_size()
     }
 }
 
-struct InteractiveWidget<'a, FocusState, Color: PixelColor> {
+struct InteractiveWidget<'a, Color: PixelColor> {
     key: interactive::Key,
-    view: &'a dyn Fn(Option<&FocusState>) -> ComplexWidget<'a, FocusState, Color>,
-    evaluated: Option<&'a mut ComplexWidget<'a, FocusState, Color>>,
+    view: &'a dyn Fn(Option<&FocusState>) -> ComplexWidget<'a, Color>,
+    evaluated: Option<&'a mut ComplexWidget<'a, Color>>,
 }
 
-enum WidgetVariant<'a, FocusState, Color: PixelColor> {
-    Complex(ComplexWidget<'a, FocusState, Color>),
-    Interactive(InteractiveWidget<'a, FocusState, Color>),
+enum WidgetVariant<'a, Color: PixelColor> {
+    Complex(ComplexWidget<'a, Color>),
+    Interactive(InteractiveWidget<'a, Color>),
 }
 
-impl<'a, FocusState, Color: PixelColor> WidgetVariant<'a, FocusState, Color> {
-    fn primitive(bump: &'a Bump, primitive: impl Primitive<Color> + 'a, layout: Layout) -> Self {
+impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
+    fn primitive(bump: &'a Bump, primitive: impl Primitive<Color> + 'a, sizing: Sizing) -> Self {
         WidgetVariant::Complex(ComplexWidget {
             inner: ComplexWidgetVariant::primitive(bump, primitive),
-            layout,
+            sizing,
             size: Size::zero(),
         })
     }
 
     fn component<const N: usize>(
         bump: &'a Bump,
-        component: impl Component<FocusState, Color> + 'a,
-        layout: Layout,
-        children: [Widget<'a, FocusState, Color>; N],
+        component: impl Component<'a, Color> + 'a,
+        sizing: Sizing,
+        children: [Widget<'a, Color>; N],
     ) -> Self {
         WidgetVariant::Complex(ComplexWidget {
             inner: ComplexWidgetVariant::component(bump, component, children),
-            layout,
+            sizing,
             size: Size::zero(),
         })
     }
 }
 
-pub struct Widget<'a, FocusState, Color: PixelColor>(WidgetVariant<'a, FocusState, Color>);
+pub struct Widget<'a, Color: PixelColor>(WidgetVariant<'a, Color>);
 
 pub struct Factory {
     pub bump: Bump,
 }
 impl Factory {
-    pub fn component<'a, const N: usize, FocusState, Color: PixelColor>(
+    pub fn component<'a, const N: usize, Color: PixelColor>(
         &'a self,
-        component: impl Component<FocusState, Color> + 'a,
-        layout: Layout,
-        children: [Widget<'a, FocusState, Color>; N],
-    ) -> Widget<'a, FocusState, Color> {
+        component: impl Component<'a, Color> + 'a,
+        sizing: Sizing,
+        children: [Widget<'a, Color>; N],
+    ) -> Widget<'a, Color> {
         Widget(WidgetVariant::component(
-            &self.bump, component, layout, children,
+            &self.bump, component, sizing, children,
         ))
     }
 
-    pub fn primitive<'a, FocusState, Color: PixelColor>(
+    pub fn primitive<'a, Color: PixelColor>(
         &'a self,
+        sizing: Sizing,
         primitive: impl Primitive<Color> + 'a,
-        layout: Layout,
-    ) -> Widget<'a, FocusState, Color> {
-        Widget(WidgetVariant::primitive(&self.bump, primitive, layout))
+    ) -> Widget<'a, Color> {
+        Widget(WidgetVariant::primitive(&self.bump, primitive, sizing))
     }
 
-    pub fn view<'a, const N: usize, FocusState, Color: PixelColor>(
+    pub fn view<'a, const N: usize, Color: PixelColor>(
         &'a self,
-        layout: Layout,
-        children: [Widget<'a, FocusState, Color>; N],
-    ) -> View<'a, FocusState, Color> {
+        direction: Direction,
+        children: [Widget<'a, Color>; N],
+    ) -> View<'a, Color> {
         View {
             widgets: self.bump.alloc(children),
-            layout,
+            direction,
         }
     }
 
-    pub fn view_ref<'a, FocusState, Color: PixelColor>(
+    pub fn view_ref<'a, Color: PixelColor>(
         &self,
-        layout: Layout,
-        children: &'a mut [Widget<'a, FocusState, Color>],
-    ) -> View<'a, FocusState, Color> {
+        direction: Direction,
+        children: &'a mut [Widget<'a, Color>],
+    ) -> View<'a, Color> {
         View {
             widgets: children,
-            layout,
+            direction,
         }
     }
+
+    pub fn spacer<'a, Color: PixelColor>(&'a self) -> Widget<'a, Color> {
+        self.primitive(Sizing::Fill, Spacer::zero())
+    }
+
+    // pub fn centered<'a, Color: PixelColor>(&'a self) -> Widget<'a, Color> {
+    //     self.view(
+    //         Direction::Horizontal,
+    //         [
+    //             primitive(Sizing::Fill, Spacer::zero()),
+    //             v.primitive(
+    //                 Sizing::Fill,
+    //                 Text {
+    //                     content: self.text.clone(),
+    //                     font_style: self.font_style.clone(),
+    //                 },
+    //             ),
+    //             v.primitive(Sizing::Fill, Spacer::zero()),
+    //         ],
+    //     )
+    // }
 }
 
-pub struct View<'a, FocusState, Color: PixelColor> {
-    widgets: &'a mut [Widget<'a, FocusState, Color>],
-    layout: Layout,
+pub struct View<'a, Color: PixelColor> {
+    widgets: &'a mut [Widget<'a, Color>],
+    direction: Direction,
 }
 
-impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
-    fn reduce_fill_space(layout: &Layout) -> impl Fn(Size, Size) -> Size {
-        match layout.direction {
+impl<'a, Color: PixelColor> View<'a, Color> {
+    fn reduce_fill_space(direction: Direction) -> impl Fn(Size, Size) -> Size {
+        match direction {
             Direction::Horizontal => |fill_space: Size, size: Size| {
                 Size::new(fill_space.width - size.width, fill_space.height)
             },
@@ -172,8 +190,8 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
         }
     }
 
-    fn adjust_position(layout: &Layout) -> impl Fn(Position, Size) -> Position {
-        match layout.direction {
+    fn adjust_position(direction: Direction) -> impl Fn(Position, Size) -> Position {
+        match direction {
             Direction::Horizontal => {
                 |position: Position, size: Size| Position::new(position.x + size.width, position.y)
             }
@@ -190,23 +208,19 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
         focus_key: interactive::Key,
         focus_state: &FocusState,
     ) -> Option<Size> {
-        let reduce_fill_space = Self::reduce_fill_space(&self.layout);
+        let reduce_fill_space = Self::reduce_fill_space(self.direction);
 
         let (num_fill, fill_space) = self.widgets.iter_mut().fold(
             (0, available_space),
             |(num_fill, fill_space), Widget(widget)| {
-                let size_complex =
-                    |complex: &mut ComplexWidget<'a, FocusState, Color>| match &complex
-                        .layout
-                        .sizing
-                    {
-                        Sizing::Intrinsic => {
-                            let size = complex.intrinsic_size();
-                            complex.size = size;
-                            (num_fill, reduce_fill_space(fill_space, size))
-                        }
-                        Sizing::Fill => (num_fill + 1, fill_space),
-                    };
+                let size_complex = |complex: &mut ComplexWidget<'a, Color>| match complex.sizing {
+                    Sizing::Intrinsic => {
+                        let size = complex.intrinsic_size();
+                        complex.size = size;
+                        (num_fill, reduce_fill_space(fill_space, size))
+                    }
+                    Sizing::Fill => (num_fill + 1, fill_space),
+                };
 
                 match widget {
                     WidgetVariant::Complex(complex) => {
@@ -233,7 +247,7 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
         if num_fill > 0 {
             Some(
                 fill_space
-                    / match self.layout.direction {
+                    / match self.direction {
                         Direction::Horizontal => Size::new(num_fill, 1),
                         Direction::Vertical => Size::new(1, num_fill),
                     },
@@ -252,30 +266,29 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
         focus_state: &FocusState,
         has_focus_changed: bool,
         target: &mut T,
-    ) -> Result<SizedView<'a, FocusState, Color>, T::Error> {
+    ) -> Result<Vec<FocusItem>, T::Error> {
         let size_per_widget = self
             .compute_size_per_widget(&factory.bump, available_space, focus_key, focus_state)
             .unwrap_or(Size::zero());
-        let adjust_position = Self::adjust_position(&self.layout);
+        let adjust_position = Self::adjust_position(self.direction);
 
         let mut position = Position::zero();
-        let mut interactives = Vec::new();
+        let mut focus_items = Vec::new();
 
-        let mut update_position =
-            |complex: &mut ComplexWidget<'a, FocusState, Color>| match complex.layout.sizing {
-                Sizing::Intrinsic => {
-                    let current_position = position;
-                    position = adjust_position(position, complex.size);
-                    current_position
-                }
-                Sizing::Fill => {
-                    complex.size = size_per_widget;
+        let mut update_position = |complex: &mut ComplexWidget<'a, Color>| match complex.sizing {
+            Sizing::Intrinsic => {
+                let current_position = position;
+                position = adjust_position(position, complex.size);
+                current_position
+            }
+            Sizing::Fill => {
+                complex.size = size_per_widget;
 
-                    let current_position = position;
-                    position = adjust_position(position, complex.size);
-                    current_position
-                }
-            };
+                let current_position = position;
+                position = adjust_position(position, complex.size);
+                current_position
+            }
+        };
 
         for Widget(widget) in self.widgets.iter_mut() {
             let (has_changed, widget_position, complex) = match widget {
@@ -291,7 +304,7 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
                         unsafe { interactive.evaluated.as_deref_mut().unwrap_unchecked() };
                     let widget_position = update_position(complex);
 
-                    interactives.push(FocusItem {
+                    focus_items.push(FocusItem {
                         position: widget_position,
                         key: interactive.key,
                     });
@@ -313,10 +326,10 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
                     widget_position,
                     complex.size,
                 ) {
-                    Some(mut local_target) => match &complex.inner {
+                    Some(mut local_target) => match &mut complex.inner {
                         ComplexWidgetVariant::Component(component, children) => {
                             let view = component.view(factory, children);
-                            let sized = view.render(
+                            let view_focus_items = view.render(
                                 factory,
                                 background,
                                 complex.size,
@@ -326,7 +339,7 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
                                 target,
                             )?;
 
-                            interactives.extend(sized.interactives);
+                            focus_items.extend(view_focus_items);
                         }
                         ComplexWidgetVariant::Primitive(primitive) => {
                             primitive.draw(&mut local_target);
@@ -338,16 +351,6 @@ impl<'a, FocusState, Color: PixelColor> View<'a, FocusState, Color> {
             }
         }
 
-        Ok(SizedView {
-            widgets: self.widgets,
-            layout: self.layout,
-            interactives,
-        })
+        Ok(focus_items)
     }
-}
-
-pub(crate) struct SizedView<'a, FocusState, Color: PixelColor> {
-    widgets: &'a [Widget<'a, FocusState, Color>],
-    layout: Layout,
-    interactives: Vec<FocusItem>,
 }

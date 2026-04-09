@@ -122,3 +122,10 @@ pub(crate) struct FocusNode {
     left: Index,
     right: Index,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FocusState {
+    Unfocused,
+    Focused,
+    Active,
+}

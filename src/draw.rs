@@ -5,10 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use bumpalo::Bump;
 use embedded_graphics::Pixel;
-use embedded_graphics::image::{Image, ImageRaw};
-use embedded_graphics::prelude::{
-    Dimensions, DrawTarget, DrawTargetExt, OriginDimensions, PixelColor, Point, PointsIter,
-};
+use embedded_graphics::prelude::{Dimensions, DrawTarget, OriginDimensions, PixelColor, Point};
 use embedded_graphics::primitives::Rectangle;
 
 use crate::position::Position;

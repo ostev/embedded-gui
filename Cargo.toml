@@ -4,13 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-embedded-graphics = "0.8.1"
-glyphr = "0.5.0"
 embedded_gui_macros = { path = "embedded_gui_macros" }
 bumpalo = { version = "3.20.2", features = ["boxed", "collections"] }
-hashbrown = "0.16.1"
+hashbrown = "0.17.0"
 itertools = { version = "0.14.0", features = [] }
-embedded-graphics-simulator = "0.7.0"
+embedded-graphics = "0.8.2"
 
 [[example]]
 name = "font-rendering"

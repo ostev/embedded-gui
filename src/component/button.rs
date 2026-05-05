@@ -18,7 +18,6 @@ use crate::{
 pub struct Button<'model, Color: PixelColor, S: AsRef<str>> {
     pub text: SignalRef<'model, S>,
     pub font_style: SignalRef<'model, MonoTextStyle<'static, Color>>,
-    pub background_color: SignalRef<'model, Color>,
     pub size: SignalRef<'model, Size>,
 }
 
@@ -36,21 +35,18 @@ impl<'a, 'model: 'a, Color: PixelColor, S: AsRef<str>> Component<'a, Color>
         v: &'a crate::view::Factory,
         _children: &mut [crate::view::Widget<'a, Color>],
     ) -> crate::view::View<'a, Color> {
-        v.background(
-            *self.background_color,
-            v.view(
+        v.view(
+            Direction::Horizontal,
+            [v.centered(
                 Direction::Horizontal,
-                [v.centered(
-                    Direction::Horizontal,
-                    v.primitive(
-                        Sizing::Fill,
-                        Text {
-                            content: self.text.clone(),
-                            font_style: self.font_style.clone(),
-                        },
-                    ),
-                )],
-            ),
+                v.primitive(
+                    Sizing::Intrinsic,
+                    Text {
+                        content: self.text.clone(),
+                        font_style: self.font_style.clone(),
+                    },
+                ),
+            )],
         )
     }
 }

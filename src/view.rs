@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use alloc::vec::Vec;
 use bumpalo::Bump;
 use embedded_graphics::prelude::PixelColor;
@@ -5,7 +7,7 @@ use embedded_graphics::prelude::PixelColor;
 use crate::{
     background::{Background, Layer},
     component::{Component, group::Group},
-    draw::{self, LocalTarget},
+    draw::{self, Framebuffer, LocalTarget},
     interactive::{self, FocusItem, FocusState},
     layout::{Direction, Sizing},
     position::Position,
@@ -87,9 +89,14 @@ struct InteractiveWidget<'a, Color: PixelColor> {
     evaluated: Option<&'a mut ComplexWidget<'a, Color>>,
 }
 
+struct LayeredWidget<'a, Color: PixelColor> {
+    layers: &'a [Widget<'a, Color>],
+}
+
 enum WidgetVariant<'a, Color: PixelColor> {
     Complex(ComplexWidget<'a, Color>),
     Interactive(InteractiveWidget<'a, Color>),
+    // Layered(LayeredWidget<'a, Color>),
 }
 
 impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
@@ -105,7 +112,9 @@ impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
             Self::Interactive(interactive) => {
                 let complex = unsafe { interactive.evaluated.as_deref().unwrap_unchecked() };
                 has_focus_changed || unsafe { complex.inner.has_changed(has_focus_changed) }
-            }
+            } // Self::Layered(LayeredWidget { layers }) => layers
+              //     .iter()
+              //     .any(|Widget(widget)| unsafe { widget.has_changed(has_focus_changed) }),
         }
     }
 
@@ -187,7 +196,6 @@ impl Factory {
         View {
             widgets: self.bump.alloc(children),
             direction,
-            background: None,
         }
     }
 
@@ -199,7 +207,6 @@ impl Factory {
         View {
             widgets: children,
             direction,
-            background: None,
         }
     }
 
@@ -245,20 +252,9 @@ impl Factory {
             self.centered(Direction::Horizontal, widget),
         )
     }
-
-    pub fn background<'a, Color: PixelColor>(
-        &'a self,
-        background: Color,
-        mut view: View<'a, Color>,
-    ) -> View<'a, Color> {
-        view.background = Some(background);
-
-        view
-    }
 }
 
 pub struct View<'a, Color: PixelColor> {
-    background: Option<Color>,
     widgets: &'a mut [Widget<'a, Color>],
     direction: Direction,
 }
@@ -267,10 +263,16 @@ impl<'a, Color: PixelColor> View<'a, Color> {
     fn reduce_fill_space(direction: Direction) -> impl Fn(Size, Size) -> Size {
         match direction {
             Direction::Horizontal => |fill_space: Size, size: Size| {
-                Size::new(fill_space.width - size.width, fill_space.height)
+                Size::new(
+                    fill_space.width.saturating_sub(size.width),
+                    fill_space.height,
+                )
             },
             Direction::Vertical => |fill_space: Size, size: Size| {
-                Size::new(fill_space.width, fill_space.height - size.height)
+                Size::new(
+                    fill_space.width,
+                    fill_space.height.saturating_sub(size.height),
+                )
             },
         }
     }
@@ -342,16 +344,17 @@ impl<'a, Color: PixelColor> View<'a, Color> {
         }
     }
 
-    pub(crate) fn render<T: embedded_graphics::draw_target::DrawTarget<Color = Color>>(
+    pub(crate) fn render(
         mut self,
         factory: &'a Factory,
-        background: Color,
+        origin: Position,
         available_space: Size,
         focus_key: interactive::Key,
         focus_state: &FocusState,
         has_focus_changed: bool,
-        target: &mut T,
-    ) -> Result<Vec<FocusItem>, T::Error> {
+        target: &mut draw::Framebuffer<Color>,
+        background_color: Color,
+    ) -> Result<Vec<FocusItem>, Infallible> {
         let size_per_widget = self
             .compute_size_per_widget(&factory.bump, available_space, focus_key, focus_state)
             .unwrap_or(Size::zero());
@@ -404,25 +407,21 @@ impl<'a, Color: PixelColor> View<'a, Color> {
 
                         let view_focus_items = view.render(
                             factory,
-                            self.background.unwrap_or(background),
+                            origin + widget_position,
                             complex.size,
                             focus_key,
                             focus_state,
                             has_focus_changed,
                             target,
+                            background_color,
                         )?;
 
                         focus_items.extend(view_focus_items);
                     }
                     ComplexWidgetVariant::Primitive(primitive) => {
-                        match LocalTarget::try_new(
-                            self.background.unwrap_or(background),
-                            widget_position,
-                            complex.size,
-                        ) {
+                        match LocalTarget::try_new(target, origin + widget_position, complex.size) {
                             Some(mut local_target) => {
                                 primitive.draw(&mut local_target);
-                                local_target.blit(target)?
                             }
                             None => {}
                         }

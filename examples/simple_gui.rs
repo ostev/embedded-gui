@@ -1,7 +1,7 @@
 use embedded_graphics::{
     mono_font::{MonoTextStyle, iso_8859_13::FONT_10X20},
-    pixelcolor::{BinaryColor, Rgb888},
-    prelude::RgbColor,
+    pixelcolor::{BinaryColor, Rgb888, raw::RawU8},
+    prelude::{PixelColor, RgbColor},
 };
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 use embedded_gui::{
@@ -14,15 +14,36 @@ use embedded_gui::{
     size::Size,
 };
 
+#[repr(u8)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+enum Palette {
+    White,
+    Red,
+}
+
+impl PixelColor for Palette {
+    type Raw = RawU8;
+}
+
+impl Into<Rgb888> for Palette {
+    fn into(self) -> Rgb888 {
+        match self {
+            Palette::White => Rgb888::WHITE,
+            Palette::Red => Rgb888::RED,
+        }
+    }
+}
+
 #[derive(Reactive)]
 struct MyApp {
     text: Signal<String>,
-    font_style: Signal<MonoTextStyle<'static, Rgb888>>,
+    font_style: Signal<MonoTextStyle<'static, Palette>>,
 }
 
 enum Msg {}
 
 impl App for MyApp {
+    type Palette = Palette;
     type Color = Rgb888;
     type Msg = Msg;
 
@@ -30,14 +51,14 @@ impl App for MyApp {
         embedded_gui::interactive::FocusState::Unfocused
     }
 
-    fn background_color() -> Self::Color {
-        Rgb888::WHITE
+    fn background_color() -> Palette {
+        Palette::White
     }
 
     fn init() -> Self {
         Self {
             text: Signal::new("Hi".to_string()),
-            font_style: Signal::new(MonoTextStyle::new(&FONT_10X20, Rgb888::RED)),
+            font_style: Signal::new(MonoTextStyle::new(&FONT_10X20, Palette::Red)),
         }
     }
 
@@ -46,34 +67,34 @@ impl App for MyApp {
     fn view<'a>(
         &'a self,
         v: &'a embedded_gui::view::Factory,
-    ) -> embedded_gui::view::View<'a, Self::Color> {
+    ) -> embedded_gui::view::View<'a, Palette> {
         v.view(
             Direction::Horizontal,
             [
-                // v.spacer(),
-                // v.primitive(
-                //     Sizing::Intrinsic,
-                //     Text {
-                //         content: self.text.to_ref(),
-                //         font_style: self.font_style.to_ref(),
-                //     },
-                // ),
-                // v.spacer(),
-                v.component(
+                v.spacer(),
+                v.primitive(
                     Sizing::Intrinsic,
+                    Text {
+                        content: self.text.to_ref(),
+                        font_style: self.font_style.to_ref(),
+                    },
+                ),
+                v.spacer(),
+                v.primitive(
+                    Sizing::Intrinsic,
+                    Text {
+                        content: self.text.to_ref(),
+                        font_style: self.font_style.to_ref(),
+                    },
+                ),
+                v.component(
+                    Sizing::Fill,
                     Button {
                         text: SignalRef::owned("Say hi!"),
                         font_style: self.font_style.to_ref(),
-                        background_color: SignalRef::owned(Rgb888::BLUE),
                         size: SignalRef::owned(Size::new(128, 32)),
                     },
-                    [v.primitive(
-                        Sizing::Intrinsic,
-                        Text {
-                            content: self.text.to_ref(),
-                            font_style: self.font_style.to_ref(),
-                        },
-                    )],
+                    [],
                 ),
             ],
         )

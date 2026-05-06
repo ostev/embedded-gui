@@ -1,5 +1,3 @@
-use std::env::var;
-
 use proc_macro2::{Span, TokenStream};
 use quote::{TokenStreamExt, format_ident, quote, quote_spanned};
 use syn::{

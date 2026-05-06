@@ -1,5 +1,4 @@
 use core::convert::Infallible;
-use std::marker::PhantomData;
 
 use alloc::vec;
 use alloc::vec::Vec;

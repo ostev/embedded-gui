@@ -1,8 +1,3 @@
-use core::convert::Infallible;
-
-use alloc::vec;
-use alloc::vec::Vec;
-use bumpalo::Bump;
 use embedded_graphics::Pixel;
 use embedded_graphics::prelude::{Dimensions, DrawTarget, OriginDimensions, PixelColor, Point};
 use embedded_graphics::primitives::Rectangle;
@@ -10,84 +5,68 @@ use embedded_graphics::primitives::Rectangle;
 use crate::position::Position;
 use crate::size::Size;
 
-pub(crate) struct Framebuffer<Color: PixelColor> {
-    buffer: Vec<Color>,
-    width: usize,
-    height: usize,
-}
+// pub(crate) struct Framebuffer<Color: PixelColor> {
+//     buffer: Vec<Color>,
+//     width: usize,
+//     height: usize,
+// }
 
-impl<Color: PixelColor> Framebuffer<Color> {
-    pub fn new(background: Color, width: usize, height: usize) -> Self {
-        Self {
-            buffer: vec![background; width * height],
-            width,
-            height,
-        }
-    }
+// impl<Color: PixelColor> Framebuffer<Color> {
+//     pub fn new(background: Color, width: usize, height: usize) -> Self {
+//         Self {
+//             buffer: vec![background; width * height],
+//             width,
+//             height,
+//         }
+//     }
 
-    const fn index(&self, x: usize, y: usize) -> usize {
-        x + y * self.width
-    }
+//     const fn index(&self, x: usize, y: usize) -> usize {
+//         x + y * self.width
+//     }
 
-    pub fn blit<T: DrawTarget<Color = Color>>(&self, target: &mut T) -> Result<(), T::Error> {
-        self.blit_with(target, |color| *color)
-    }
+//     pub fn blit<T: DrawTarget<Color = Color>>(&self, target: &mut T) -> Result<(), T::Error> {
+//         self.blit_with(target, |color| *color)
+//     }
 
-    pub fn blit_with<T: DrawTarget<Color = TargetColor>, TargetColor: PixelColor>(
-        &self,
-        target: &mut T,
-        f: impl FnMut(&Color) -> TargetColor,
-    ) -> Result<(), T::Error> {
-        target.fill_contiguous(
-            &Rectangle::new(
-                Point::zero(),
-                embedded_graphics::geometry::Size::new(self.width as u32, self.height as u32),
-            ),
-            self.buffer.iter().map(f),
-        )
-    }
-}
+//     pub fn blit_with<T: DrawTarget<Color = TargetColor>, TargetColor: PixelColor>(
+//         &self,
+//         target: &mut T,
+//         f: impl FnMut(&Color) -> TargetColor,
+//     ) -> Result<(), T::Error> {
+//         target.fill_contiguous(
+//             &Rectangle::new(
+//                 Point::zero(),
+//                 embedded_graphics::geometry::Size::new(self.width as u32, self.height as u32),
+//             ),
+//             self.buffer.iter().map(f),
+//         )
+//     }
+// }
 
-pub struct LocalTarget<'a, Color: PixelColor> {
-    target: &'a mut Framebuffer<Color>,
+pub struct LocalTarget<'a, T: DrawTarget> {
+    target: &'a mut T,
     position: Position,
     size: Size,
-    bottom_right: Position,
+    bottom_right: Point,
 }
 
-impl<'a, Color: PixelColor> LocalTarget<'a, Color> {
+impl<'a, T: DrawTarget> LocalTarget<'a, T> {
     /// Creates a new draw target. If the provided size is zero in either dimension,
     /// it returns `None` instead.
-    pub(crate) fn try_new(
-        target: &'a mut Framebuffer<Color>,
-        position: Position,
-        size: Size,
-    ) -> Option<Self> {
+    pub(crate) fn try_new(target: &'a mut T, position: Position, size: Size) -> Option<Self> {
         size.bottom_right().map(|bottom_right| Self {
             target,
             position,
             size,
-            bottom_right,
+            bottom_right: bottom_right.into(),
         })
     }
 
-    pub fn draw(&mut self, pixel: Pixel<Color>) {
-        let Pixel(position, color) = pixel;
+    // pub fn draw(&mut self, pixel: Pixel<Color>) {
 
-        if (position.x < 0)
-            | (position.x > self.bottom_right.x as i32)
-            | (position.y < 0)
-            | (position.y > self.bottom_right.y as i32)
-        {
-            return;
-        }
-
-        let absolute_x = position.x as usize + self.position.x as usize;
-        let absolute_y = position.y as usize + self.position.y as usize;
-
-        let index = self.target.index(absolute_x, absolute_y);
-        self.target.buffer[index] = color;
-    }
+    // let index = self.target.index(absolute_x, absolute_y);
+    // self.target.buffer[index] = color;
+    // }
 
     pub fn size(&self) -> Size {
         self.size
@@ -98,22 +77,47 @@ impl<'a, Color: PixelColor> LocalTarget<'a, Color> {
     }
 }
 
-impl<'a, Color: PixelColor> OriginDimensions for LocalTarget<'a, Color> {
+impl<'a, T: DrawTarget> OriginDimensions for LocalTarget<'a, T> {
     fn size(&self) -> embedded_graphics::prelude::Size {
         self.size.into()
     }
 }
 
-impl<'a, Color: PixelColor> DrawTarget for LocalTarget<'a, Color> {
+const fn within_bounds(position: Point, bottom_right: Point) -> bool {
+    #[cfg(feature = "clipping")]
+    {
+        (position.x > 0)
+            && (position.x < bottom_right.x as i32)
+            && (position.y > 0)
+            && (position.y < bottom_right.y as i32)
+    }
+    #[cfg(not(feature = "clipping"))]
+    {
+        true
+    }
+}
+
+impl<'a, Color: PixelColor, T: DrawTarget<Color = Color>> DrawTarget for LocalTarget<'a, T> {
     type Color = Color;
 
-    type Error = Infallible;
+    type Error = T::Error;
 
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where
         I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>>,
     {
-        pixels.into_iter().for_each(|pixel| self.draw(pixel));
+        self.target.draw_iter(pixels.into_iter().map(|pixel| {
+            let Pixel(position, color) = pixel;
+
+            if within_bounds(position, self.bottom_right) {
+                let absolute_x = position.x + self.position.x as i32;
+                let absolute_y = position.y + self.position.y as i32;
+
+                Pixel(Point::new(absolute_x, absolute_y), color)
+            } else {
+                panic!("Provided pixel position is out of bounds!")
+            }
+        }))?;
 
         Ok(())
     }
@@ -122,62 +126,34 @@ impl<'a, Color: PixelColor> DrawTarget for LocalTarget<'a, Color> {
     where
         I: IntoIterator<Item = Self::Color>,
     {
-        let max_x = self.size.width as i32;
-        let max_y = self.size.height as i32;
-        let mut colors = colors.into_iter();
+        #[cfg(feature = "clipping")]
+        let clipped = area.intersection(&self.local_bounds());
 
-        for row in 0..area.size.height {
-            let local_y = area.top_left.y + row as i32;
+        #[cfg(not(feature = "clipping"))]
+        let clipped = area;
 
-            for col in 0..area.size.width {
-                let color = match colors.next() {
-                    Some(color) => color,
-                    None => return Ok(()),
-                };
+        let absolute_top_left =
+            clipped.top_left + Point::new(self.position.x as i32, self.position.y as i32);
+        let transformed_area = Rectangle::new(absolute_top_left, area.size);
 
-                let local_x = area.top_left.x + col as i32;
-
-                if (local_x < 0) | (local_x >= max_x) | (local_y < 0) | (local_y >= max_y) {
-                    continue;
-                }
-
-                let absolute_x = local_x as usize + self.position.x as usize;
-                let absolute_y = local_y as usize + self.position.y as usize;
-                let index = self.target.index(absolute_x, absolute_y);
-                self.target.buffer[index] = color;
-            }
-        }
-
-        Ok(())
+        self.target.fill_contiguous(&transformed_area, colors)
     }
 
     fn fill_solid(&mut self, area: &Rectangle, color: Self::Color) -> Result<(), Self::Error> {
+        #[cfg(feature = "clipping")]
         let clipped = area.intersection(&self.local_bounds());
-        let row_width = clipped.size.width as usize;
 
-        for row in 0..clipped.size.height {
-            let local_y = clipped.top_left.y + row as i32;
-            let absolute_y = local_y as usize + self.position.y as usize;
-            let absolute_x = clipped.top_left.x as usize + self.position.x as usize;
-            let start = self.target.index(absolute_x, absolute_y);
-            let end = start + row_width;
-            self.target.buffer[start..end].fill(color);
-        }
+        #[cfg(not(feature = "clipping"))]
+        let clipped = area;
 
-        Ok(())
+        let absolute_top_left =
+            clipped.top_left + Point::new(self.position.x as i32, self.position.y as i32);
+        let transformed_area = Rectangle::new(absolute_top_left, area.size);
+
+        self.target.fill_solid(&transformed_area, color)
     }
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        let row_width = self.size.width as usize;
-
-        for row in 0..self.size.height {
-            let absolute_y = self.position.y as usize + row as usize;
-            let absolute_x = self.position.x as usize;
-            let start = self.target.index(absolute_x, absolute_y);
-            let end = start + row_width;
-            self.target.buffer[start..end].fill(color);
-        }
-
-        Ok(())
+        self.target.fill_solid(&self.bounding_box(), color)
     }
 }

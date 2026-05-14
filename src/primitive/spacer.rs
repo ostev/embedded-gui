@@ -1,12 +1,7 @@
 use crate::Reactive;
-use embedded_graphics::prelude::PixelColor;
+use embedded_graphics::draw_target::DrawTarget;
 
-use crate::{
-    layout::IntrinsicSize,
-    primitive::Primitive,
-    signal::{Signal, SignalRef},
-    size::Size,
-};
+use crate::{layout::IntrinsicSize, primitive::Primitive, signal::SignalRef, size::Size};
 
 #[derive(Reactive)]
 pub struct Spacer<'model> {
@@ -27,6 +22,8 @@ impl<'model> IntrinsicSize for Spacer<'model> {
     }
 }
 
-impl<'model, Color: PixelColor> Primitive<Color> for Spacer<'model> {
-    fn draw(&self, _target: &mut crate::draw::LocalTarget<Color>) {}
+impl<'model, T: DrawTarget> Primitive<T> for Spacer<'model> {
+    fn draw(&self, _target: &mut crate::draw::LocalTarget<T>) -> Result<(), T::Error> {
+        Ok(())
+    }
 }

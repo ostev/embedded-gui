@@ -1,15 +1,10 @@
-use alloc::string::String;
-use embedded_graphics::{
-    mono_font::MonoTextStyle,
-    pixelcolor::Rgb888,
-    prelude::{PixelColor, RgbColor},
-};
+use embedded_graphics::{draw_target::DrawTarget, mono_font::MonoTextStyle, prelude::PixelColor};
 
 use crate::{
-    Reactive, background,
+    Reactive,
     component::Component,
     layout::{Direction, IntrinsicSize, Sizing},
-    primitive::{spacer::Spacer, text::Text},
+    primitive::text::Text,
     signal::SignalRef,
     size::Size,
 };
@@ -27,14 +22,20 @@ impl<'model, Color: PixelColor, S: AsRef<str>> IntrinsicSize for Button<'model, 
     }
 }
 
-impl<'a, 'model: 'a, Color: PixelColor, S: AsRef<str>> Component<'a, Color>
-    for Button<'model, Color, S>
+impl<
+    'a,
+    'model: 'a,
+    Color: PixelColor,
+    S: AsRef<str>,
+    T: DrawTarget<Color = Color>,
+    FocusKey: Copy + Eq,
+> Component<'a, T, FocusKey> for Button<'model, Color, S>
 {
     fn view(
         &self,
         v: &'a crate::view::Factory,
-        _children: &mut [crate::view::Widget<'a, Color>],
-    ) -> crate::view::View<'a, Color> {
+        _children: &mut [crate::view::Widget<'a, T, FocusKey>],
+    ) -> crate::view::View<'a, T, FocusKey> {
         v.view(
             Direction::Horizontal,
             [v.centered(

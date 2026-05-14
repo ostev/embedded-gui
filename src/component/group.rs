@@ -1,10 +1,9 @@
-use embedded_graphics::{mono_font::MonoTextStyle, prelude::PixelColor};
+use embedded_graphics::draw_target::DrawTarget;
 
 use crate::{
     Reactive,
     component::Component,
-    layout::{Direction, IntrinsicSize, Sizing},
-    primitive::{spacer::Spacer, text::Text},
+    layout::{Direction, IntrinsicSize},
     signal::SignalRef,
     size::Size,
 };
@@ -30,12 +29,12 @@ impl<'model> IntrinsicSize for Group<'model> {
     }
 }
 
-impl<'a, 'model, Color: PixelColor> Component<'a, Color> for Group<'model> {
+impl<'a, 'model, T: DrawTarget, FocusKey: Copy + Eq> Component<'a, T, FocusKey> for Group<'model> {
     fn view(
         &self,
         v: &'a crate::view::Factory,
-        children: &'a mut [crate::view::Widget<'a, Color>],
-    ) -> crate::view::View<'a, Color> {
+        children: &'a mut [crate::view::Widget<'a, T, FocusKey>],
+    ) -> crate::view::View<'a, T, FocusKey> {
         v.view_ref(*self.direction, children)
     }
 }

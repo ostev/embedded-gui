@@ -1,10 +1,10 @@
-use embedded_graphics::prelude::PixelColor;
+use embedded_graphics::draw_target::DrawTarget;
 
-use crate::{draw, layout::IntrinsicSize, signal::Reactive, size::Size};
+use crate::{draw::LocalTarget, layout::IntrinsicSize, signal::Reactive};
 
 pub mod spacer;
 pub mod text;
 
-pub trait Primitive<Color: PixelColor>: Reactive + IntrinsicSize {
-    fn draw(&self, target: &mut draw::LocalTarget<Color>);
+pub trait Primitive<T: DrawTarget>: Reactive + IntrinsicSize {
+    fn draw(&self, target: &mut LocalTarget<T>) -> Result<(), T::Error>;
 }

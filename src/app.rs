@@ -1,53 +1,49 @@
-use alloc::{boxed::Box, vec::Vec};
 use bumpalo::Bump;
-use embedded_graphics::prelude::{DrawTarget, PixelColor};
+use embedded_graphics::prelude::{Dimensions, DrawTarget};
 
 use crate::{
-    draw, interactive,
+    interactive,
     position::Position,
     view::{self, View},
 };
 
 pub trait App {
-    type Color: PixelColor;
-    type Palette: Into<Self::Color> + PixelColor;
+    type Target: DrawTarget;
     type Msg;
+    type FocusKey: Copy + Eq;
 
     fn init() -> Self;
 
     fn default_focus_state() -> interactive::FocusState;
-    fn background_color() -> Self::Palette;
+    fn default_focus_key() -> Self::FocusKey;
+
+    fn background_color() -> <Self::Target as DrawTarget>::Color;
     fn update(&mut self, msg: Self::Msg);
-    fn view<'a>(&'a self, v: &'a view::Factory) -> View<'a, Self::Palette>;
+    fn view<'a>(&'a self, v: &'a view::Factory) -> View<'a, Self::Target, Self::FocusKey>;
 }
 
-pub fn start<'a, A: App, D: DrawTarget<Color = A::Color>>(
+pub fn start<'a, A: App>(
     app: A,
-    display: &mut D,
-) -> Result<(), D::Error> {
-    display.clear(A::background_color().into())?;
+    display: &mut A::Target,
+) -> Result<(), <A::Target as DrawTarget>::Error> {
+    display.clear(A::background_color())?;
 
     let factory = view::Factory { bump: Bump::new() };
 
     let view = app.view(&factory);
-    let focus_key = interactive::Key::MAX;
 
-    let mut framebuffer = draw::Framebuffer::new(
-        A::background_color(),
-        display.bounding_box().size.width as usize,
-        display.bounding_box().size.height as usize,
-    );
+    display.clear(A::background_color())?;
 
-    let Ok(_) = view.render(
+    view.render(
         &factory,
         Position::zero(),
         display.bounding_box().size.into(),
-        focus_key,
+        A::default_focus_key(),
         &A::default_focus_state(),
         false,
-        &mut framebuffer,
+        display,
         A::background_color(),
-    );
+    )?;
 
-    framebuffer.blit_with(display, |palette_color| (*palette_color).into())
+    Ok(())
 }

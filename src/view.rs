@@ -1,27 +1,26 @@
-use core::convert::Infallible;
-
-use alloc::vec::Vec;
 use bumpalo::Bump;
-use embedded_graphics::prelude::PixelColor;
+use embedded_graphics::draw_target::DrawTarget;
 
 use crate::{
-    background::{Background, Layer},
-    component::{Component, group::Group},
-    draw::{self, Framebuffer, LocalTarget},
-    interactive::{self, FocusItem, FocusState},
+    component::{group::Group, Component},
+    draw::LocalTarget,
+    interactive::FocusState,
     layout::{Direction, Sizing},
     position::Position,
-    primitive::{Primitive, spacer::Spacer, text::Text},
-    signal::{Reactive, SignalRef},
+    primitive::{Primitive, spacer::Spacer},
+    signal::SignalRef,
     size::Size,
 };
 
-enum ComplexWidgetVariant<'a, Color: PixelColor> {
-    Component(&'a dyn Component<'a, Color>, &'a mut [Widget<'a, Color>]),
-    Primitive(&'a dyn Primitive<Color>),
+enum ComplexWidgetVariant<'a, T: DrawTarget, FocusKey: Copy + Eq> {
+    Component(
+        &'a dyn Component<'a, T, FocusKey>,
+        &'a mut [Widget<'a, T, FocusKey>],
+    ),
+    Primitive(&'a dyn Primitive<T>),
 }
 
-impl<'a, Color: PixelColor> ComplexWidgetVariant<'a, Color> {
+impl<'a, T: DrawTarget, FocusKey: Copy + Eq> ComplexWidgetVariant<'a, T, FocusKey> {
     fn intrinsic_size(&self) -> Size {
         match self {
             ComplexWidgetVariant::Component(component, _) => component.intrinsic_size(),
@@ -30,7 +29,7 @@ impl<'a, Color: PixelColor> ComplexWidgetVariant<'a, Color> {
     }
 }
 
-impl<'a, Color: PixelColor> ComplexWidgetVariant<'a, Color> {
+impl<'a, T: DrawTarget, FocusKey: Copy + Eq> ComplexWidgetVariant<'a, T, FocusKey> {
     /// Determines whether a complex widget variant has changed and needs
     /// to be updated.
     ///
@@ -50,56 +49,56 @@ impl<'a, Color: PixelColor> ComplexWidgetVariant<'a, Color> {
         }
     }
 
-    fn primitive(bump: &'a Bump, primitive: impl Primitive<Color> + 'a) -> Self {
+    fn primitive(bump: &'a Bump, primitive: impl Primitive<T> + 'a) -> Self {
         Self::Primitive(bump.alloc(primitive))
     }
 
     fn component<const N: usize>(
         bump: &'a Bump,
-        component: impl Component<'a, Color> + 'a,
-        children: [Widget<'a, Color>; N],
+        component: impl Component<'a, T, FocusKey> + 'a,
+        children: [Widget<'a, T, FocusKey>; N],
     ) -> Self {
         Self::Component(bump.alloc(component), bump.alloc(children))
     }
 
     fn component_ref(
         bump: &'a Bump,
-        component: impl Component<'a, Color> + 'a,
-        children: &'a mut [Widget<'a, Color>],
+        component: impl Component<'a, T, FocusKey> + 'a,
+        children: &'a mut [Widget<'a, T, FocusKey>],
     ) -> Self {
         Self::Component(bump.alloc(component), children)
     }
 }
 
-struct ComplexWidget<'a, Color: PixelColor> {
-    inner: ComplexWidgetVariant<'a, Color>,
+struct ComplexWidget<'a, T: DrawTarget, FocusKey: Copy + Eq> {
+    inner: ComplexWidgetVariant<'a, T, FocusKey>,
     sizing: Sizing,
     size: Size,
 }
 
-impl<'a, Color: PixelColor> ComplexWidget<'a, Color> {
+impl<'a, T: DrawTarget, FocusKey: Copy + Eq> ComplexWidget<'a, T, FocusKey> {
     fn intrinsic_size(&self) -> Size {
         self.inner.intrinsic_size()
     }
 }
 
-struct InteractiveWidget<'a, Color: PixelColor> {
-    key: interactive::Key,
-    view: &'a dyn Fn(Option<&FocusState>) -> ComplexWidget<'a, Color>,
-    evaluated: Option<&'a mut ComplexWidget<'a, Color>>,
+struct InteractiveWidget<'a, T: DrawTarget, FocusKey: Copy + Eq> {
+    key: FocusKey,
+    view: &'a dyn Fn(Option<&FocusState>) -> ComplexWidget<'a, T, FocusKey>,
+    evaluated: Option<&'a mut ComplexWidget<'a, T, FocusKey>>,
 }
 
-struct LayeredWidget<'a, Color: PixelColor> {
-    layers: &'a [Widget<'a, Color>],
+struct LayeredWidget<'a, T: DrawTarget, FocusKey: Copy + Eq> {
+    layers: &'a [Widget<'a, T, FocusKey>],
 }
 
-enum WidgetVariant<'a, Color: PixelColor> {
-    Complex(ComplexWidget<'a, Color>),
-    Interactive(InteractiveWidget<'a, Color>),
-    // Layered(LayeredWidget<'a, Color>),
+enum WidgetVariant<'a, T: DrawTarget, FocusKey: Copy + Eq> {
+    Complex(ComplexWidget<'a, T, FocusKey>),
+    Interactive(InteractiveWidget<'a, T, FocusKey>),
+    // Layered(LayeredWidget<'a, T, FocusKey>),
 }
 
-impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
+impl<'a, T: DrawTarget, FocusKey: Copy + Eq> WidgetVariant<'a, T, FocusKey> {
     /// Determines whether a widget variant has changed and needs to be updated.
     ///
     /// ## Safety notes
@@ -118,7 +117,7 @@ impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
         }
     }
 
-    fn primitive(bump: &'a Bump, primitive: impl Primitive<Color> + 'a, sizing: Sizing) -> Self {
+    fn primitive(bump: &'a Bump, primitive: impl Primitive<T> + 'a, sizing: Sizing) -> Self {
         WidgetVariant::Complex(ComplexWidget {
             inner: ComplexWidgetVariant::primitive(bump, primitive),
             sizing,
@@ -128,9 +127,9 @@ impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
 
     fn component<const N: usize>(
         bump: &'a Bump,
-        component: impl Component<'a, Color> + 'a,
+        component: impl Component<'a, T, FocusKey> + 'a,
         sizing: Sizing,
-        children: [Widget<'a, Color>; N],
+        children: [Widget<'a, T, FocusKey>; N],
     ) -> Self {
         WidgetVariant::Complex(ComplexWidget {
             inner: ComplexWidgetVariant::component(bump, component, children),
@@ -141,9 +140,9 @@ impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
 
     fn component_ref(
         bump: &'a Bump,
-        component: impl Component<'a, Color> + 'a,
+        component: impl Component<'a, T, FocusKey> + 'a,
         sizing: Sizing,
-        children: &'a mut [Widget<'a, Color>],
+        children: &'a mut [Widget<'a, T, FocusKey>],
     ) -> Self {
         WidgetVariant::Complex(ComplexWidget {
             inner: ComplexWidgetVariant::component_ref(bump, component, children),
@@ -153,72 +152,72 @@ impl<'a, Color: PixelColor> WidgetVariant<'a, Color> {
     }
 }
 
-pub struct Widget<'a, Color: PixelColor>(WidgetVariant<'a, Color>);
+pub struct Widget<'a, T: DrawTarget, FocusKey: Copy + Eq>(WidgetVariant<'a, T, FocusKey>);
 
 pub struct Factory {
     pub bump: Bump,
 }
 impl Factory {
-    pub fn component<'a, const N: usize, Color: PixelColor>(
+    pub fn component<'a, const N: usize, T: DrawTarget, FocusKey: Copy + Eq>(
         &'a self,
         sizing: Sizing,
-        component: impl Component<'a, Color> + 'a,
-        children: [Widget<'a, Color>; N],
-    ) -> Widget<'a, Color> {
+        component: impl Component<'a, T, FocusKey> + 'a,
+        children: [Widget<'a, T, FocusKey>; N],
+    ) -> Widget<'a, T, FocusKey> {
         Widget(WidgetVariant::component(
             &self.bump, component, sizing, children,
         ))
     }
-    pub fn component_ref<'a, Color: PixelColor>(
+    pub fn component_ref<'a, T: DrawTarget, FocusKey: Copy + Eq>(
         &'a self,
         sizing: Sizing,
-        component: impl Component<'a, Color> + 'a,
-        children: &'a mut [Widget<'a, Color>],
-    ) -> Widget<'a, Color> {
+        component: impl Component<'a, T, FocusKey> + 'a,
+        children: &'a mut [Widget<'a, T, FocusKey>],
+    ) -> Widget<'a, T, FocusKey> {
         Widget(WidgetVariant::component_ref(
             &self.bump, component, sizing, children,
         ))
     }
 
-    pub fn primitive<'a, Color: PixelColor>(
+    pub fn primitive<'a, T: DrawTarget, FocusKey: Copy + Eq>(
         &'a self,
         sizing: Sizing,
-        primitive: impl Primitive<Color> + 'a,
-    ) -> Widget<'a, Color> {
+        primitive: impl Primitive<T> + 'a,
+    ) -> Widget<'a, T, FocusKey> {
         Widget(WidgetVariant::primitive(&self.bump, primitive, sizing))
     }
 
-    pub fn view<'a, const N: usize, Color: PixelColor>(
+    pub fn view<'a, const N: usize, T: DrawTarget, FocusKey: Copy + Eq>(
         &'a self,
         direction: Direction,
-        children: [Widget<'a, Color>; N],
-    ) -> View<'a, Color> {
+        children: [Widget<'a, T, FocusKey>; N],
+    ) -> View<'a, T, FocusKey> {
         View {
             widgets: self.bump.alloc(children),
             direction,
         }
     }
 
-    pub fn view_ref<'a, Color: PixelColor>(
+    pub fn view_ref<'a, T: DrawTarget, FocusKey: Copy + Eq>(
         &self,
         direction: Direction,
-        children: &'a mut [Widget<'a, Color>],
-    ) -> View<'a, Color> {
+        children: &'a mut [Widget<'a, T, FocusKey>],
+    ) -> View<'a, T, FocusKey> {
         View {
             widgets: children,
             direction,
         }
     }
 
-    pub fn spacer<'a, Color: PixelColor>(&'a self) -> Widget<'a, Color> {
+    pub fn spacer<'a, T: DrawTarget, FocusKey: Copy + Eq>(&'a self) -> Widget<'a, T, FocusKey> {
         self.primitive(Sizing::Fill, Spacer::zero())
     }
 
-    pub fn group<'a, const N: usize, Color: PixelColor>(
+    pub fn group<'a, const N: usize, T: DrawTarget, FocusKey: Copy + Eq>(
         &'a self,
         direction: Direction,
-        children: [Widget<'a, Color>; N],
-    ) -> Widget<'a, Color> {
+        children: [Widget<'a, T, FocusKey>; N],
+    ) -> Widget<'a, T, FocusKey> {
         self.component(
             Sizing::Fill,
             Group::zero(SignalRef::owned(direction)),
@@ -226,11 +225,11 @@ impl Factory {
         )
     }
 
-    pub fn group_ref<'a, Color: PixelColor>(
+    pub fn group_ref<'a, T: DrawTarget, FocusKey: Copy + Eq>(
         &'a self,
         direction: Direction,
-        children: &'a mut [Widget<'a, Color>],
-    ) -> Widget<'a, Color> {
+        children: &'a mut [Widget<'a, T, FocusKey>],
+    ) -> Widget<'a, T, FocusKey> {
         self.component_ref(
             Sizing::Fill,
             Group::zero(SignalRef::owned(direction)),
@@ -238,15 +237,18 @@ impl Factory {
         )
     }
 
-    pub fn centered<'a, Color: PixelColor>(
+    pub fn centered<'a, T: DrawTarget, FocusKey: Copy + Eq>(
         &'a self,
         direction: Direction,
-        widget: Widget<'a, Color>,
-    ) -> Widget<'a, Color> {
+        widget: Widget<'a, T, FocusKey>,
+    ) -> Widget<'a, T, FocusKey> {
         self.group(direction, [self.spacer(), widget, self.spacer()])
     }
 
-    pub fn middle<'a, Color: PixelColor>(&'a self, widget: Widget<'a, Color>) -> Widget<'a, Color> {
+    pub fn middle<'a, T: DrawTarget, FocusKey: Copy + Eq>(
+        &'a self,
+        widget: Widget<'a, T, FocusKey>,
+    ) -> Widget<'a, T, FocusKey> {
         self.centered(
             Direction::Vertical,
             self.centered(Direction::Horizontal, widget),
@@ -254,12 +256,12 @@ impl Factory {
     }
 }
 
-pub struct View<'a, Color: PixelColor> {
-    widgets: &'a mut [Widget<'a, Color>],
+pub struct View<'a, T: DrawTarget, FocusKey: Copy + Eq> {
+    widgets: &'a mut [Widget<'a, T, FocusKey>],
     direction: Direction,
 }
 
-impl<'a, Color: PixelColor> View<'a, Color> {
+impl<'a, T: DrawTarget, FocusKey: Copy + Eq> View<'a, T, FocusKey> {
     fn reduce_fill_space(direction: Direction) -> impl Fn(Size, Size) -> Size {
         match direction {
             Direction::Horizontal => |fill_space: Size, size: Size| {
@@ -292,7 +294,7 @@ impl<'a, Color: PixelColor> View<'a, Color> {
         &mut self,
         bump: &'a Bump,
         available_space: Size,
-        focus_key: interactive::Key,
+        focus_key: FocusKey,
         focus_state: &FocusState,
     ) -> Option<Size> {
         let reduce_fill_space = Self::reduce_fill_space(self.direction);
@@ -300,7 +302,7 @@ impl<'a, Color: PixelColor> View<'a, Color> {
         let (num_fill, fill_space) = self.widgets.iter_mut().fold(
             (0, available_space),
             |(num_fill, fill_space), Widget(widget)| {
-                let size_complex = |complex: &mut ComplexWidget<'a, Color>| match complex.sizing {
+                let size_complex = |complex: &mut ComplexWidget<'a, T, FocusKey>| match complex.sizing {
                     Sizing::Intrinsic => {
                         let size = complex.intrinsic_size();
                         complex.size = size;
@@ -349,21 +351,21 @@ impl<'a, Color: PixelColor> View<'a, Color> {
         factory: &'a Factory,
         origin: Position,
         available_space: Size,
-        focus_key: interactive::Key,
+        focus_key: FocusKey,
         focus_state: &FocusState,
         has_focus_changed: bool,
-        target: &mut draw::Framebuffer<Color>,
-        background_color: Color,
-    ) -> Result<Vec<FocusItem>, Infallible> {
+        target: &mut T,
+        background_color: T::Color,
+    ) -> Result<(), T::Error> {
         let size_per_widget = self
             .compute_size_per_widget(&factory.bump, available_space, focus_key, focus_state)
             .unwrap_or(Size::zero());
         let adjust_position = Self::adjust_position(self.direction);
 
         let mut position = Position::zero();
-        let mut focus_items = Vec::new();
+        // let mut focus_items = Vec::new();
 
-        let mut update_position = |complex: &mut ComplexWidget<'a, Color>| match complex.sizing {
+        let mut update_position = |complex: &mut ComplexWidget<'a, T, FocusKey>| match complex.sizing {
             Sizing::Intrinsic => {
                 let current_position = position;
                 position = adjust_position(position, complex.size);
@@ -391,10 +393,10 @@ impl<'a, Color: PixelColor> View<'a, Color> {
                         unsafe { interactive.evaluated.as_deref_mut().unwrap_unchecked() };
                     let widget_position = update_position(complex);
 
-                    focus_items.push(FocusItem {
-                        position: widget_position,
-                        key: interactive.key,
-                    });
+                    // focus_items.push(FocusItem {
+                    //     position: widget_position,
+                    //     key: interactive.key,
+                    // });
 
                     (widget_position, complex)
                 }
@@ -416,12 +418,12 @@ impl<'a, Color: PixelColor> View<'a, Color> {
                             background_color,
                         )?;
 
-                        focus_items.extend(view_focus_items);
+                        // focus_items.extend(view_focus_items);
                     }
                     ComplexWidgetVariant::Primitive(primitive) => {
                         match LocalTarget::try_new(target, origin + widget_position, complex.size) {
                             Some(mut local_target) => {
-                                primitive.draw(&mut local_target);
+                                primitive.draw(&mut local_target)?;
                             }
                             None => {}
                         }
@@ -430,6 +432,7 @@ impl<'a, Color: PixelColor> View<'a, Color> {
             }
         }
 
-        Ok(focus_items)
+        // Ok(focus_items)
+        Ok(())
     }
 }

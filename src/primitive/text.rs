@@ -1,16 +1,15 @@
-use crate::Reactive;
-use bumpalo::collections::String;
 use embedded_graphics::{
     Drawable,
-    mono_font::{self, MonoTextStyle},
+    draw_target::DrawTarget,
+    mono_font::MonoTextStyle,
     prelude::{PixelColor, Point},
-    text::{Alignment, LineHeight, TextStyleBuilder},
+    text::{Alignment, TextStyleBuilder},
 };
 
 use crate::{
     layout::IntrinsicSize,
     primitive::Primitive,
-    signal::{Reactive, Signal, SignalRef},
+    signal::{Reactive, SignalRef},
     size::Size,
 };
 
@@ -34,18 +33,23 @@ impl<'model, 'a, Color: PixelColor, S: AsRef<str>> IntrinsicSize for Text<'model
     }
 }
 
-impl<'model, 'a, Color: PixelColor, S: AsRef<str>> Primitive<Color> for Text<'model, Color, S> {
-    fn draw(&self, target: &mut crate::draw::LocalTarget<Color>) {
+impl<'model, 'a, Color: PixelColor, S: AsRef<str>, T: DrawTarget<Color = Color>> Primitive<T>
+    for Text<'model, Color, S>
+{
+    fn draw(&self, target: &mut crate::draw::LocalTarget<T>) -> Result<(), T::Error> {
         let text_style = TextStyleBuilder::new()
             .alignment(Alignment::Left)
             .baseline(embedded_graphics::text::Baseline::Top)
             .build();
-        let Ok(_) = embedded_graphics::text::Text::with_text_style(
+
+        embedded_graphics::text::Text::with_text_style(
             self.content.as_ref(),
             Point::zero(),
             *self.font_style,
             text_style,
         )
-        .draw(target);
+        .draw(target)?;
+
+        Ok(())
     }
 }

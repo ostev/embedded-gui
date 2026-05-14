@@ -1,7 +1,6 @@
 use embedded_graphics::{
     mono_font::{MonoTextStyle, iso_8859_13::FONT_10X20},
-    pixelcolor::{BinaryColor, Rgb888, raw::RawU8},
-    prelude::{PixelColor, RgbColor},
+    pixelcolor::{Rgb888, RgbColor},
 };
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 use embedded_gui::{
@@ -14,51 +13,35 @@ use embedded_gui::{
     size::Size,
 };
 
-#[repr(u8)]
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-enum Palette {
-    White,
-    Red,
-}
-
-impl PixelColor for Palette {
-    type Raw = RawU8;
-}
-
-impl Into<Rgb888> for Palette {
-    fn into(self) -> Rgb888 {
-        match self {
-            Palette::White => Rgb888::WHITE,
-            Palette::Red => Rgb888::RED,
-        }
-    }
-}
-
 #[derive(Reactive)]
 struct MyApp {
     text: Signal<String>,
-    font_style: Signal<MonoTextStyle<'static, Palette>>,
+    font_style: Signal<MonoTextStyle<'static, Rgb888>>,
 }
 
 enum Msg {}
 
 impl App for MyApp {
-    type Palette = Palette;
-    type Color = Rgb888;
+    type Target = SimulatorDisplay<Rgb888>;
     type Msg = Msg;
+    type FocusKey = ();
 
     fn default_focus_state() -> embedded_gui::interactive::FocusState {
         embedded_gui::interactive::FocusState::Unfocused
     }
 
-    fn background_color() -> Palette {
-        Palette::White
+    fn default_focus_key() -> Self::FocusKey {
+        ()
+    }
+
+    fn background_color() -> Rgb888 {
+        Rgb888::WHITE
     }
 
     fn init() -> Self {
         Self {
             text: Signal::new("Hi".to_string()),
-            font_style: Signal::new(MonoTextStyle::new(&FONT_10X20, Palette::Red)),
+            font_style: Signal::new(MonoTextStyle::new(&FONT_10X20, Rgb888::RED)),
         }
     }
 
@@ -67,7 +50,7 @@ impl App for MyApp {
     fn view<'a>(
         &'a self,
         v: &'a embedded_gui::view::Factory,
-    ) -> embedded_gui::view::View<'a, Palette> {
+    ) -> embedded_gui::view::View<'a, Self::Target, Self::FocusKey> {
         v.view(
             Direction::Horizontal,
             [

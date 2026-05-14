@@ -5,16 +5,8 @@ use alloc::vec::Vec;
 
 use crate::position::Position;
 
-pub type Key = usize;
-
-macro_rules! key {
-    ($discriminant:expr) => {
-        discriminant as ::embedded_gui::interactive::Key
-    };
-}
-
-pub(crate) struct FocusOrder {
-    nodes: Vec<FocusNode>,
+pub(crate) struct FocusOrder<Key: Copy + Eq> {
+    nodes: Vec<FocusNode<Key>>,
 }
 
 /// Finds the minimum and maximum values in an iterator where the maximum is positive
@@ -39,8 +31,8 @@ fn find_min_max<T>(
     (below, above)
 }
 
-impl FocusOrder {
-    pub fn new(elements: Vec<FocusItem>) {
+impl<Key: Copy + Eq> FocusOrder<Key> {
+    pub fn new(elements: Vec<FocusItem<Key>>) {
         match elements.len() {
             0 => FocusOrder { nodes: Vec::new() },
             1 => {
@@ -56,7 +48,7 @@ impl FocusOrder {
                 FocusOrder { nodes: vec![node] }
             }
             _ => {
-                let nodes: Vec<FocusNode> = elements
+                let nodes: Vec<FocusNode<Key>> = elements
                     .iter()
                     .map(|item| {
                         let (down, up) = {
@@ -106,7 +98,7 @@ impl FocusOrder {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct FocusItem {
+pub(crate) struct FocusItem<Key: Copy + Eq> {
     pub(crate) position: Position,
     pub(crate) key: Key,
 }
@@ -115,8 +107,8 @@ pub(crate) type Index = u16;
 const NO_INDEX: u16 = u16::MAX;
 
 #[derive(Clone, Copy)]
-pub(crate) struct FocusNode {
-    item: FocusItem,
+pub(crate) struct FocusNode<Key: Copy + Eq> {
+    item: FocusItem<Key>,
     up: Index,
     down: Index,
     left: Index,

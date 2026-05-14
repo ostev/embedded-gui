@@ -22,7 +22,7 @@ pub trait App {
     fn view<'a>(&'a self, v: &'a view::Factory) -> View<'a, Self::Target, Self::FocusKey>;
 }
 
-pub fn start<'a, A: App>(
+pub fn init_and_render_once<A: App>(
     app: A,
     display: &mut A::Target,
 ) -> Result<(), <A::Target as DrawTarget>::Error> {
@@ -46,4 +46,27 @@ pub fn start<'a, A: App>(
     )?;
 
     Ok(())
+}
+
+pub fn render<A: App>(
+    app: &A,
+    factory: &mut view::Factory,
+    display: &mut A::Target,
+) -> Result<(), <A::Target as DrawTarget>::Error> {
+    let view = app.view(factory);
+
+    let output = view.render(
+        factory,
+        Position::zero(),
+        display.bounding_box().size.into(),
+        A::default_focus_key(),
+        &A::default_focus_state(),
+        false,
+        display,
+        A::background_color(),
+    );
+
+    factory.bump.reset();
+
+    output
 }

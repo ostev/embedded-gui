@@ -88,7 +88,7 @@ fn main() {
     let mut display =
         SimulatorDisplay::<Rgb888>::new(embedded_graphics::prelude::Size::new(400, 400));
 
-    app::start(MyApp::init(), &mut display).unwrap();
+    app::init_and_render_once(MyApp::init(), &mut display).unwrap();
 
     let output_settings = OutputSettingsBuilder::new().build();
     Window::new("Hello World", &output_settings).show_static(&display);

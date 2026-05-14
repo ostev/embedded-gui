@@ -2,7 +2,7 @@ use bumpalo::Bump;
 use embedded_graphics::draw_target::DrawTarget;
 
 use crate::{
-    component::{group::Group, Component},
+    component::{Component, group::Group},
     draw::LocalTarget,
     interactive::FocusState,
     layout::{Direction, Sizing},
@@ -157,7 +157,12 @@ pub struct Widget<'a, T: DrawTarget, FocusKey: Copy + Eq>(WidgetVariant<'a, T, F
 pub struct Factory {
     pub bump: Bump,
 }
+
 impl Factory {
+    pub fn new() -> Factory {
+        Factory { bump: Bump::new() }
+    }
+
     pub fn component<'a, const N: usize, T: DrawTarget, FocusKey: Copy + Eq>(
         &'a self,
         sizing: Sizing,
@@ -302,14 +307,15 @@ impl<'a, T: DrawTarget, FocusKey: Copy + Eq> View<'a, T, FocusKey> {
         let (num_fill, fill_space) = self.widgets.iter_mut().fold(
             (0, available_space),
             |(num_fill, fill_space), Widget(widget)| {
-                let size_complex = |complex: &mut ComplexWidget<'a, T, FocusKey>| match complex.sizing {
-                    Sizing::Intrinsic => {
-                        let size = complex.intrinsic_size();
-                        complex.size = size;
-                        (num_fill, reduce_fill_space(fill_space, size))
-                    }
-                    Sizing::Fill => (num_fill + 1, fill_space),
-                };
+                let size_complex =
+                    |complex: &mut ComplexWidget<'a, T, FocusKey>| match complex.sizing {
+                        Sizing::Intrinsic => {
+                            let size = complex.intrinsic_size();
+                            complex.size = size;
+                            (num_fill, reduce_fill_space(fill_space, size))
+                        }
+                        Sizing::Fill => (num_fill + 1, fill_space),
+                    };
 
                 match widget {
                     WidgetVariant::Complex(complex) => {
@@ -365,20 +371,21 @@ impl<'a, T: DrawTarget, FocusKey: Copy + Eq> View<'a, T, FocusKey> {
         let mut position = Position::zero();
         // let mut focus_items = Vec::new();
 
-        let mut update_position = |complex: &mut ComplexWidget<'a, T, FocusKey>| match complex.sizing {
-            Sizing::Intrinsic => {
-                let current_position = position;
-                position = adjust_position(position, complex.size);
-                current_position
-            }
-            Sizing::Fill => {
-                complex.size = size_per_widget;
+        let mut update_position =
+            |complex: &mut ComplexWidget<'a, T, FocusKey>| match complex.sizing {
+                Sizing::Intrinsic => {
+                    let current_position = position;
+                    position = adjust_position(position, complex.size);
+                    current_position
+                }
+                Sizing::Fill => {
+                    complex.size = size_per_widget;
 
-                let current_position = position;
-                position = adjust_position(position, complex.size);
-                current_position
-            }
-        };
+                    let current_position = position;
+                    position = adjust_position(position, complex.size);
+                    current_position
+                }
+            };
 
         for Widget(widget) in self.widgets.iter_mut() {
             // Safety notes: this *should* be safe since we have explicitly set the

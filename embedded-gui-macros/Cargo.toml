@@ -1,5 +1,5 @@
 [package]
-name = "embedded_gui_macros"
+name = "embedded-gui-macros"
 version = "0.1.0"
 edition = "2024"
 

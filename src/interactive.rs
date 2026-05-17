@@ -1,3 +1,4 @@
+use core::hash::Hash;
 use core::u16;
 
 use alloc::vec;
@@ -5,8 +6,8 @@ use alloc::vec::Vec;
 
 use crate::position::Position;
 
-pub(crate) struct FocusOrder<Key: Copy + Eq> {
-    nodes: Vec<FocusNode<Key>>,
+pub(crate) struct FocusOrder<K: Key> {
+    nodes: Vec<FocusNode<K>>,
 }
 
 /// Finds the minimum and maximum values in an iterator where the maximum is positive
@@ -31,8 +32,8 @@ fn find_min_max<T>(
     (below, above)
 }
 
-impl<Key: Copy + Eq> FocusOrder<Key> {
-    pub fn new(elements: Vec<FocusItem<Key>>) {
+impl<K: Key> FocusOrder<K> {
+    pub fn new(elements: Vec<FocusItem<K>>) {
         match elements.len() {
             0 => FocusOrder { nodes: Vec::new() },
             1 => {
@@ -48,7 +49,7 @@ impl<Key: Copy + Eq> FocusOrder<Key> {
                 FocusOrder { nodes: vec![node] }
             }
             _ => {
-                let nodes: Vec<FocusNode<Key>> = elements
+                let nodes: Vec<FocusNode<K>> = elements
                     .iter()
                     .map(|item| {
                         let (down, up) = {
@@ -107,8 +108,8 @@ pub(crate) type Index = u16;
 const NO_INDEX: u16 = u16::MAX;
 
 #[derive(Clone, Copy)]
-pub(crate) struct FocusNode<Key: Copy + Eq> {
-    item: FocusItem<Key>,
+pub(crate) struct FocusNode<K: Key> {
+    item: FocusItem<K>,
     up: Index,
     down: Index,
     left: Index,
@@ -121,3 +122,5 @@ pub enum FocusState {
     Focused,
     Active,
 }
+
+pub trait Key: Copy + Eq + Hash {}

@@ -4,15 +4,18 @@ pub mod button;
 pub mod group;
 
 use crate::{
+    interactive,
     layout::IntrinsicSize,
     signal::Reactive,
     view::{self, View, Widget},
 };
 
-pub trait Component<'a, T: DrawTarget, FocusKey: Copy + Eq>: Reactive + IntrinsicSize {
+pub trait Component<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>:
+    Reactive + IntrinsicSize
+{
     fn view(
         &self,
         v: &'a view::Factory,
-        children: &'a mut [Widget<'a, T, FocusKey>],
-    ) -> View<'a, T, FocusKey>;
+        children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
+    ) -> View<'a, T, FocusKey, Event, Msg>;
 }

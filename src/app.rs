@@ -10,7 +10,8 @@ use crate::{
 pub trait App {
     type Target: DrawTarget;
     type Msg;
-    type FocusKey: Copy + Eq;
+    type Event;
+    type FocusKey: interactive::Key;
 
     fn init() -> Self;
 
@@ -19,7 +20,10 @@ pub trait App {
 
     fn background_color() -> <Self::Target as DrawTarget>::Color;
     fn update(&mut self, msg: Self::Msg);
-    fn view<'a>(&'a self, v: &'a view::Factory) -> View<'a, Self::Target, Self::FocusKey>;
+    fn view<'a>(
+        &'a self,
+        v: &'a view::Factory,
+    ) -> View<'a, Self::Target, Self::FocusKey, Self::Event, Self::Msg>;
 }
 
 pub fn init_and_render_once<A: App>(

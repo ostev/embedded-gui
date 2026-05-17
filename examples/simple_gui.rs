@@ -24,6 +24,7 @@ enum Msg {}
 impl App for MyApp {
     type Target = SimulatorDisplay<Rgb888>;
     type Msg = Msg;
+    type Event = ();
     type FocusKey = ();
 
     fn default_focus_state() -> embedded_gui::interactive::FocusState {
@@ -50,7 +51,7 @@ impl App for MyApp {
     fn view<'a>(
         &'a self,
         v: &'a embedded_gui::view::Factory,
-    ) -> embedded_gui::view::View<'a, Self::Target, Self::FocusKey> {
+    ) -> embedded_gui::view::View<'a, Self::Target, Self::FocusKey, Self::Event, Self::Msg> {
         v.view(
             Direction::Horizontal,
             [

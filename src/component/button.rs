@@ -29,13 +29,15 @@ impl<
     S: AsRef<str>,
     T: DrawTarget<Color = Color>,
     FocusKey: Copy + Eq,
-> Component<'a, T, FocusKey> for Button<'model, Color, S>
+    Event,
+    Msg,
+> Component<'a, T, FocusKey, Event, Msg> for Button<'model, Color, S>
 {
     fn view(
         &self,
         v: &'a crate::view::Factory,
-        _children: &mut [crate::view::Widget<'a, T, FocusKey>],
-    ) -> crate::view::View<'a, T, FocusKey> {
+        _children: &mut [crate::view::Widget<'a, T, FocusKey, Event, Msg>],
+    ) -> crate::view::View<'a, T, FocusKey, Event, Msg> {
         v.view(
             Direction::Horizontal,
             [v.centered(

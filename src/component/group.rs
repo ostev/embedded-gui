@@ -29,12 +29,14 @@ impl<'model> IntrinsicSize for Group<'model> {
     }
 }
 
-impl<'a, 'model, T: DrawTarget, FocusKey: Copy + Eq> Component<'a, T, FocusKey> for Group<'model> {
+impl<'a, 'model, T: DrawTarget, FocusKey: Copy + Eq, Event, Msg>
+    Component<'a, T, FocusKey, Event, Msg> for Group<'model>
+{
     fn view(
         &self,
         v: &'a crate::view::Factory,
-        children: &'a mut [crate::view::Widget<'a, T, FocusKey>],
-    ) -> crate::view::View<'a, T, FocusKey> {
+        children: &'a mut [crate::view::Widget<'a, T, FocusKey, Event, Msg>],
+    ) -> crate::view::View<'a, T, FocusKey, Event, Msg> {
         v.view_ref(*self.direction, children)
     }
 }

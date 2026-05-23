@@ -12,7 +12,7 @@ pub trait App {
     type Event;
     type FocusKey: interactive::Key;
 
-    fn init() -> Self;
+    fn new() -> Self;
 
     fn initial_focus_key() -> Self::FocusKey;
 
@@ -22,8 +22,6 @@ pub trait App {
         &'a self,
         v: &'a view::Factory<Self::FocusKey, Self::Event, Self::Msg>,
     ) -> View<'a, Self::Target, Self::FocusKey, Self::Event, Self::Msg>;
-
-    fn receive_event() -> impl Future<Output = Self::Event>;
 }
 
 pub struct InternalState<FocusKey: interactive::Key> {
@@ -31,9 +29,11 @@ pub struct InternalState<FocusKey: interactive::Key> {
     previous_focus_key: Option<FocusKey>,
 }
 
-pub async fn start<A: App>(
+pub async fn start<A: App, FutureEvent: Future<Output = A::Event>>(
     mut app: A,
     display: &mut A::Target,
+    mut receive_event: impl FnMut() -> FutureEvent,
+    mut after_render: impl FnMut(),
 ) -> Result<(), <A::Target as DrawTarget>::Error> {
     let initial_focus_key = A::initial_focus_key();
 
@@ -46,8 +46,9 @@ pub async fn start<A: App>(
 
     loop {
         render(&app, &mut factory, &mut internal_state, display)?;
+        after_render();
 
-        let event = A::receive_event().await;
+        let event = receive_event().await;
 
         let updated_focus = factory.dispatch(event).and_then(|msg| app.update(msg));
 

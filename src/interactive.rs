@@ -124,3 +124,5 @@ pub enum FocusState {
 }
 
 pub trait Key: Copy + Eq + Hash {}
+
+impl<T: Copy + Eq + Hash> Key for T {}

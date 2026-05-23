@@ -3,6 +3,7 @@ use embedded_graphics::{draw_target::DrawTarget, mono_font::MonoTextStyle, prelu
 use crate::{
     Reactive,
     component::Component,
+    interactive,
     layout::{Direction, IntrinsicSize, Sizing},
     primitive::text::Text,
     signal::SignalRef,
@@ -28,14 +29,14 @@ impl<
     Color: PixelColor,
     S: AsRef<str>,
     T: DrawTarget<Color = Color>,
-    FocusKey: Copy + Eq,
+    FocusKey: interactive::Key,
     Event,
     Msg,
-> Component<'a, T, FocusKey, Event, Msg> for Button<'model, Color, S>
+> Component<'a, T, Event, Msg, FocusKey> for Button<'model, Color, S>
 {
     fn view(
         &self,
-        v: &'a crate::view::Factory,
+        v: &'a crate::view::GlobalFactory<FocusKey, Event, Msg>,
         _children: &mut [crate::view::Widget<'a, T, FocusKey, Event, Msg>],
     ) -> crate::view::View<'a, T, FocusKey, Event, Msg> {
         v.view(

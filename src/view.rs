@@ -1,11 +1,13 @@
-use alloc::vec::Vec;
+use core::marker::PhantomData;
+
+use alloc::boxed::Box;
 use bumpalo::Bump;
 use embedded_graphics::draw_target::DrawTarget;
 
 use crate::{
     component::{Component, group::Group},
     draw::LocalTarget,
-    event::{self, Handler},
+    event::{self, Handler, HandlerRegistry},
     interactive::{self, FocusState},
     layout::{Direction, Sizing},
     position::Position,
@@ -16,7 +18,7 @@ use crate::{
 
 enum ComplexWidgetVariant<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
     Component(
-        &'a dyn Component<'a, T, FocusKey, Event, Msg>,
+        &'a dyn Component<'a, T, Event, Msg, FocusKey>,
         &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
     ),
     Primitive(&'a dyn Primitive<T>),
@@ -34,18 +36,14 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
 
     /// Determines whether a complex widget variant has changed and needs
     /// to be updated.
-    ///
-    /// ## Safety notes
-    /// It is the caller's responsibility to ensure that this
-    /// widget has been evaluated if it is interactive. If called after the
-    /// initial sizing pass, this will be the case.
-    unsafe fn has_changed(&self, has_focus_changed: bool) -> bool {
+
+    fn has_changed(&self, focus_key: FocusKey, previous_focus_key: FocusKey) -> bool {
         match self {
             ComplexWidgetVariant::Component(component, children) => {
                 component.has_changed()
                     || children
                         .iter()
-                        .any(|Widget(widget)| unsafe { widget.has_changed(has_focus_changed) })
+                        .any(|Widget(widget)| widget.has_changed(focus_key, previous_focus_key))
             }
             ComplexWidgetVariant::Primitive(primitive) => primitive.has_changed(),
         }
@@ -57,7 +55,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
 
     fn component<const N: usize>(
         bump: &'a Bump,
-        component: impl Component<'a, T, FocusKey, Event, Msg> + 'a,
+        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
         children: [Widget<'a, T, FocusKey, Event, Msg>; N],
     ) -> Self {
         Self::Component(bump.alloc(component), bump.alloc(children))
@@ -65,7 +63,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
 
     fn component_ref(
         bump: &'a Bump,
-        component: impl Component<'a, T, FocusKey, Event, Msg> + 'a,
+        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
         children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
     ) -> Self {
         Self::Component(bump.alloc(component), children)
@@ -88,9 +86,8 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
 
 struct InteractiveWidget<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
     key: FocusKey,
-    event_handler: event::Handler<Event, Msg>,
-    view: &'a dyn Fn(Option<&FocusState>) -> ComplexWidget<'a, T, FocusKey, Event, Msg>,
-    evaluated: Option<&'a mut ComplexWidget<'a, T, FocusKey, Event, Msg>>,
+
+    contents: &'a mut Widget<'a, T, FocusKey, Event, Msg>,
 }
 
 struct LayeredWidget<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
@@ -106,18 +103,41 @@ enum WidgetVariant<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
 impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
     WidgetVariant<'a, T, FocusKey, Event, Msg>
 {
-    /// Determines whether a widget variant has changed and needs to be updated.
+    /// Registers all the event handlers for a given widget, returning the complex widget
+    /// inside it.
     ///
-    /// ## Safety notes
-    /// It is the caller's responsibility to ensure that this
-    /// widget has been evaluated if it is interactive. If called after the
-    /// initial sizing pass, this will be the case.
-    unsafe fn has_changed(&self, has_focus_changed: bool) -> bool {
+    /// ### Safety notes
+    /// This method **must not** be called more than once.
+    fn register_handlers(
+        &mut self,
+        registry: &mut HandlerRegistry<FocusKey, Event, Msg>,
+    ) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg> {
         match self {
-            Self::Complex(complex) => unsafe { complex.inner.has_changed(has_focus_changed) },
+            WidgetVariant::Complex(complex) => complex,
+            WidgetVariant::Interactive(interactive) => {
+                interactive.contents.register_handlers(registry)
+            }
+        }
+    }
+
+    fn get_complex(&self) -> &ComplexWidget<'a, T, FocusKey, Event, Msg> {
+        match self {
+            WidgetVariant::Complex(complex) => complex,
+            WidgetVariant::Interactive(interactive) => interactive.contents.0.get_complex(),
+        }
+    }
+
+    /// Determines whether a widget variant has changed and needs to be updated.
+    fn has_changed(&self, focus_key: FocusKey, previous_focus_key: FocusKey) -> bool {
+        match self {
+            Self::Complex(complex) => complex.inner.has_changed(focus_key, previous_focus_key),
             Self::Interactive(interactive) => {
-                let complex = unsafe { interactive.evaluated.as_deref().unwrap_unchecked() };
-                has_focus_changed || unsafe { complex.inner.has_changed(has_focus_changed) }
+                let has_focus_changed = focus_key != previous_focus_key;
+                (has_focus_changed
+                    && (interactive.key == focus_key || interactive.key == previous_focus_key))
+                    || interactive
+                        .contents
+                        .has_changed(focus_key, previous_focus_key)
             } // Self::Layered(LayeredWidget { layers }) => layers
               //     .iter()
               //     .any(|Widget(widget)| unsafe { widget.has_changed(has_focus_changed) }),
@@ -134,7 +154,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
 
     fn component<const N: usize>(
         bump: &'a Bump,
-        component: impl Component<'a, T, FocusKey, Event, Msg> + 'a,
+        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
         sizing: Sizing,
         children: [Widget<'a, T, FocusKey, Event, Msg>; N],
     ) -> Self {
@@ -147,7 +167,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
 
     fn component_ref(
         bump: &'a Bump,
-        component: impl Component<'a, T, FocusKey, Event, Msg> + 'a,
+        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
         sizing: Sizing,
         children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
     ) -> Self {
@@ -157,79 +177,145 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
             size: Size::zero(),
         })
     }
+
+    // fn interactive(
+    //     bump: &'a Bump,
+    //     key: FocusKey,
+    //     event_handler: impl Fn(Event) -> Msg,
+    //     view: impl FnOnce(Option<&FocusState>) -> Widget<'a, T, FocusKey, Event, Msg>,
+    // ) -> Self {
+    //     WidgetVariant::Interactive(InteractiveWidget {
+    //         key,
+    //         event_handler: Some(event::Handler {
+    //             handler: Box::new(event_handler),
+    //         }),
+    //         view: Box::new(view),
+    //         evaluated: None,
+    //     })
+    // }
+
+    fn interactive_ref(
+        key: FocusKey,
+        contents: &'a mut Widget<'a, T, FocusKey, Event, Msg>,
+    ) -> Self {
+        WidgetVariant::Interactive(InteractiveWidget {
+            key,
+            // event_handler: Some(event::Handler {
+            //     handler: event_handler,
+            // }),
+            contents,
+        })
+    }
 }
 
 pub struct Widget<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
     WidgetVariant<'a, T, FocusKey, Event, Msg>,
 );
 
-pub struct Factory {
-    pub bump: Bump,
-}
-
-impl Factory {
-    pub fn new() -> Factory {
-        Factory { bump: Bump::new() }
+impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
+    Widget<'a, T, FocusKey, Event, Msg>
+{
+    fn has_changed(&self, focus_key: FocusKey, previous_focus_key: FocusKey) -> bool {
+        self.0.has_changed(focus_key, previous_focus_key)
     }
 
-    pub fn component<'a, const N: usize, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+    fn register_handlers(
+        &mut self,
+        registry: &mut HandlerRegistry<FocusKey, Event, Msg>,
+    ) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg> {
+        self.0.register_handlers(registry)
+    }
+}
+
+pub trait Factory<FocusKey: interactive::Key, Event, Msg> {
+    fn bump(&self) -> &Bump;
+
+    // fn map<OtherMsg>(
+    //     &mut self,
+    //     msg: impl Fn(OtherMsg) -> Msg + 'static,
+    // ) -> impl Factory<FocusKey, Event, OtherMsg>;
+
+    // fn map_focus<OtherFocusKey: interactive::Key>(
+    //     &mut self,
+    //     key: impl Fn(OtherFocusKey) -> FocusKey + 'static,
+    // ) -> impl Factory<OtherFocusKey, Event, Msg>;
+
+    fn component<'a, const N: usize, T: DrawTarget>(
         &'a self,
         sizing: Sizing,
-        component: impl Component<'a, T, FocusKey, Event, Msg> + 'a,
+        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
         children: [Widget<'a, T, FocusKey, Event, Msg>; N],
     ) -> Widget<'a, T, FocusKey, Event, Msg> {
         Widget(WidgetVariant::component(
-            &self.bump, component, sizing, children,
-        ))
-    }
-    pub fn component_ref<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
-        &'a self,
-        sizing: Sizing,
-        component: impl Component<'a, T, FocusKey, Event, Msg> + 'a,
-        children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
-    ) -> Widget<'a, T, FocusKey, Event, Msg> {
-        Widget(WidgetVariant::component_ref(
-            &self.bump, component, sizing, children,
+            self.bump(),
+            component,
+            sizing,
+            children,
         ))
     }
 
-    pub fn primitive<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+    fn component_ref<'a, T: DrawTarget>(
+        &'a self,
+        sizing: Sizing,
+        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
+        children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
+    ) -> Widget<'a, T, FocusKey, Event, Msg> {
+        Widget(WidgetVariant::component_ref(
+            self.bump(),
+            component,
+            sizing,
+            children,
+        ))
+    }
+
+    fn primitive<'a, T: DrawTarget>(
         &'a self,
         sizing: Sizing,
         primitive: impl Primitive<T> + 'a,
     ) -> Widget<'a, T, FocusKey, Event, Msg> {
-        Widget(WidgetVariant::primitive(&self.bump, primitive, sizing))
+        Widget(WidgetVariant::primitive(self.bump(), primitive, sizing))
     }
 
-    pub fn view<'a, const N: usize, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+    // fn interactive<'a, T: DrawTarget>(
+    //     &'a mut self,
+    //     key: FocusKey,
+    //     event_handler: impl Fn(Event) -> Msg + 'static,
+    //     view: impl FnOnce(Option<FocusState>) -> Widget<'a, T, FocusKey, Event, Msg>,
+    // ) -> Widget<'a, T, FocusKey, Event, Msg>;
+
+    fn view<'a, const N: usize, T: DrawTarget>(
         &'a self,
         direction: Direction,
         children: [Widget<'a, T, FocusKey, Event, Msg>; N],
     ) -> View<'a, T, FocusKey, Event, Msg> {
         View {
-            widgets: self.bump.alloc(children),
-            direction,
+            internals: ViewInternals {
+                widgets: self.bump().alloc(children),
+                direction,
+                phantom: PhantomData,
+            },
         }
     }
 
-    pub fn view_ref<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+    fn view_ref<'a, T: DrawTarget>(
         &self,
         direction: Direction,
         children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
     ) -> View<'a, T, FocusKey, Event, Msg> {
         View {
-            widgets: children,
-            direction,
+            internals: ViewInternals {
+                widgets: children,
+                direction,
+                phantom: PhantomData,
+            },
         }
     }
 
-    pub fn spacer<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
-        &'a self,
-    ) -> Widget<'a, T, FocusKey, Event, Msg> {
+    fn spacer<'a, T: DrawTarget>(&'a self) -> Widget<'a, T, FocusKey, Event, Msg> {
         self.primitive(Sizing::Fill, Spacer::zero())
     }
 
-    pub fn group<'a, const N: usize, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+    fn group<'a, const N: usize, T: DrawTarget>(
         &'a self,
         direction: Direction,
         children: [Widget<'a, T, FocusKey, Event, Msg>; N],
@@ -241,7 +327,7 @@ impl Factory {
         )
     }
 
-    pub fn group_ref<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+    fn group_ref<'a, T: DrawTarget>(
         &'a self,
         direction: Direction,
         children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
@@ -253,7 +339,7 @@ impl Factory {
         )
     }
 
-    pub fn centered<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+    fn centered<'a, T: DrawTarget>(
         &'a self,
         direction: Direction,
         widget: Widget<'a, T, FocusKey, Event, Msg>,
@@ -261,7 +347,7 @@ impl Factory {
         self.group(direction, [self.spacer(), widget, self.spacer()])
     }
 
-    pub fn middle<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+    fn middle<'a, T: DrawTarget>(
         &'a self,
         widget: Widget<'a, T, FocusKey, Event, Msg>,
     ) -> Widget<'a, T, FocusKey, Event, Msg> {
@@ -272,156 +358,367 @@ impl Factory {
     }
 }
 
+pub(crate) struct GlobalFactory<GlobalFocusKey: interactive::Key, Event, GlobalMsg> {
+    pub bump: Bump,
+
+    handler_registry: HandlerRegistry<GlobalFocusKey, Event, GlobalMsg>,
+
+    focus_key: GlobalFocusKey,
+    focus_state: FocusState,
+}
+
+impl<GlobalFocusKey: interactive::Key, Event, GlobalMsg>
+    GlobalFactory<GlobalFocusKey, Event, GlobalMsg>
+{
+    pub fn new(focus_key: GlobalFocusKey) -> Self {
+        Self {
+            bump: Bump::new(),
+            focus_state: FocusState::Unfocused,
+            focus_key,
+            handler_registry: HandlerRegistry::new(),
+        }
+    }
+
+    pub fn set_focus(&mut self, key: GlobalFocusKey, state: FocusState) {
+        self.focus_key = key;
+        self.focus_state = state;
+    }
+
+    pub fn interactive<'b, T: DrawTarget, FocusKey: Into<GlobalFocusKey>, Msg: Into<GlobalMsg>>(
+        &'b mut self,
+        key: FocusKey,
+        event_handler: impl Fn(Event) -> Msg + 'static,
+        view: impl FnOnce(Option<FocusState>) -> Widget<'b, T, GlobalFocusKey, Event, GlobalMsg>,
+    ) -> Widget<'b, T, GlobalFocusKey, Event, GlobalMsg> {
+        let global_key: GlobalFocusKey = key.into();
+
+        let state = if self.focus_key == global_key {
+            Some(self.focus_state)
+        } else {
+            None
+        };
+
+        let contents = view(state);
+
+        // Box the event_handler into a trait object so it can be moved into a 'static closure
+        let mapped_handler = Handler::new(Box::new(move |event| event_handler(event).into()));
+        self.handler_registry.register(global_key, mapped_handler);
+
+        Widget(WidgetVariant::interactive_ref(
+            global_key,
+            self.bump.alloc(contents),
+        ))
+    }
+}
+
+impl<FocusKey: interactive::Key, Event, Msg> Factory<FocusKey, Event, Msg>
+    for GlobalFactory<FocusKey, Event, Msg>
+{
+    #[inline(always)]
+    fn bump(&self) -> &Bump {
+        &self.bump
+    }
+
+    // #[inline]
+    // fn map<OtherMsg>(
+    //     &mut self,
+    //     f: impl Fn(OtherMsg) -> Msg + 'static,
+    // ) -> impl Factory<FocusKey, Event, OtherMsg> {
+    //     LocalFactory {
+    //         global: self,
+    //         map_msg: Rc::new(f),
+    //         map_focus: Rc::new(|key| key),
+    //         phantom: PhantomData,
+    //     }
+    // }
+
+    // #[inline]
+    // fn map_focus<OtherFocus: interactive::Key>(
+    //     &mut self,
+    //     f: impl Fn(OtherFocus) -> FocusKey + 'static,
+    // ) -> impl Factory<OtherFocus, Event, Msg> {
+    //     LocalFactory {
+    //         global: self,
+    //         map_msg: Rc::new(|msg| msg),
+    //         map_focus: Rc::new(f),
+    //         phantom: PhantomData,
+    //     }
+    // }
+}
+
+// pub struct LocalFactory<
+//     'a,
+//     FocusKey: Into<GlobalFocusKey>,
+//     Event,
+//     Msg: Into<GlobalMsg>,
+//     GlobalMsg,
+//     GlobalFocusKey: interactive::Key,
+// > {
+//     /// A reference to the global factory, which contains the bump allocator and
+//     /// handler registry
+//     global: &'a mut GlobalFactory<GlobalFocusKey, Event, GlobalMsg>,
+//     // /// Transforms the child views' messages into something that the global factory can understand.
+//     // map_msg: Rc<dyn Fn(Msg) -> GlobalMsg>,
+//     // /// Transforms the child view's focus keys into something that the global factory can understand.
+//     // map_focus: Rc<dyn Fn(FocusKey) -> GlobalFocusKey>,
+//     /// Since this struct doesn't actually contain a `FocusKey` or a `Msg`, we need
+//     /// a phantom data marker.
+//     phantom: PhantomData<(FocusKey, Msg)>,
+// }
+
+// impl<
+//     'a,
+//     FocusKey: Into<GlobalFocusKey>,
+//     Event,
+//     Msg: Into<GlobalMsg>,
+//     GlobalMsg,
+//     GlobalFocusKey: interactive::Key,
+// > LocalFactory<'a, FocusKey, Event, Msg, GlobalMsg, GlobalFocusKey>
+// {
+
+// }
+
+// impl<
+//     'a,
+//     FocusKey: Into<GlobalFocusKey>,
+//     Event,
+//     Msg: Into<GlobalMsg>,
+//     GlobalMsg,
+//     GlobalFocusKey: interactive::Key,
+// > Factory<GlobalFocusKey, Event, Msg>
+//     for LocalFactory<'a, FocusKey, Event, Msg, GlobalMsg, GlobalFocusKey>
+// {
+//     #[inline(always)]
+//     fn bump(&self) -> &Bump {
+//         &self.global.bump
+//     }
+
+// #[inline]
+// fn map<OtherMsg>(
+//     &mut self,
+//     f: impl Fn(OtherMsg) -> Msg + 'static,
+// ) -> impl Factory<FocusKey, Event, OtherMsg> {
+//     let map_msg = self.map_msg.clone();
+//     let map_focus = &self.map_focus;
+
+//     LocalFactory {
+//         global: self.global,
+//         map_msg: Rc::new(move |msg| map_msg(f(msg))),
+//         map_focus: move |key| map_focus(key),
+//         phantom: PhantomData,
+//     }
+// }
+
+// #[inline]
+// fn map_focus<OtherFocusKey: interactive::Key>(
+//     &mut self,
+//     f: impl Fn(OtherFocusKey) -> FocusKey,
+// ) -> impl Factory<OtherFocusKey, Event, Msg> {
+//     let map_msg = self.map_msg.clone();
+//     let map_focus = &self.map_focus;
+
+//     LocalFactory {
+//         global: self.global,
+//         map_msg: Rc::new(move |msg| map_msg(msg)),
+//         map_focus: move |key| map_focus(f(key)),
+//         phantom: PhantomData,
+//     }
+// }
+// }
+
+/// Represents a collection of widgets laid out in a set direction.
 pub struct View<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
+    internals: ViewInternals<'a, T, FocusKey, Event, Msg, UnsizedViewStage>,
+}
+
+struct ViewInternals<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    Stage: ViewProcessingStage,
+> {
     widgets: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
     direction: Direction,
+
+    phantom: PhantomData<Stage>,
+}
+
+struct UnsizedViewStage {}
+struct SizedViewStage {}
+
+trait ViewProcessingStage {}
+
+impl ViewProcessingStage for UnsizedViewStage {}
+impl ViewProcessingStage for SizedViewStage {}
+
+fn reduce_fill_space(direction: Direction) -> impl Fn(Size, Size) -> Size {
+    match direction {
+        Direction::Horizontal => |fill_space: Size, size: Size| {
+            Size::new(
+                fill_space.width.saturating_sub(size.width),
+                fill_space.height,
+            )
+        },
+        Direction::Vertical => |fill_space: Size, size: Size| {
+            Size::new(
+                fill_space.width,
+                fill_space.height.saturating_sub(size.height),
+            )
+        },
+    }
+}
+
+fn adjust_position(direction: Direction) -> impl Fn(Position, Size) -> Position {
+    match direction {
+        Direction::Horizontal => {
+            |position: Position, size: Size| Position::new(position.x + size.width, position.y)
+        }
+        Direction::Vertical => {
+            |position: Position, size: Size| Position::new(position.x, position.y + size.height)
+        }
+    }
 }
 
 impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> View<'a, T, FocusKey, Event, Msg> {
-    fn reduce_fill_space(direction: Direction) -> impl Fn(Size, Size) -> Size {
-        match direction {
-            Direction::Horizontal => |fill_space: Size, size: Size| {
-                Size::new(
-                    fill_space.width.saturating_sub(size.width),
-                    fill_space.height,
-                )
-            },
-            Direction::Vertical => |fill_space: Size, size: Size| {
-                Size::new(
-                    fill_space.width,
-                    fill_space.height.saturating_sub(size.height),
-                )
-            },
-        }
-    }
-
-    fn adjust_position(direction: Direction) -> impl Fn(Position, Size) -> Position {
-        match direction {
-            Direction::Horizontal => {
-                |position: Position, size: Size| Position::new(position.x + size.width, position.y)
-            }
-            Direction::Vertical => {
-                |position: Position, size: Size| Position::new(position.x, position.y + size.height)
-            }
-        }
-    }
-
+    /// This performs the initial sizing pass on the view's widgets, returning the sized view as well as
+    /// the size for each fill widget or [`None`] if there aren't any widgets.
     fn compute_size_per_widget(
-        &mut self,
+        self,
         bump: &'a Bump,
         available_space: Size,
         focus_key: FocusKey,
-        focus_state: &FocusState,
-    ) -> Option<Size> {
-        let reduce_fill_space = Self::reduce_fill_space(self.direction);
+    ) -> (
+        ViewInternals<'a, T, FocusKey, Event, Msg, SizedViewStage>,
+        Option<Size>,
+    ) {
+        let reduce_fill_space = reduce_fill_space(self.internals.direction);
 
-        let (num_fill, fill_space) = self.widgets.iter_mut().fold(
-            (0, available_space),
-            |(num_fill, fill_space), Widget(widget)| {
-                let size_complex =
-                    |complex: &mut ComplexWidget<'a, T, FocusKey, Event, Msg>| match complex.sizing
-                    {
-                        Sizing::Intrinsic => {
-                            let size = complex.intrinsic_size();
-                            complex.size = size;
-                            (num_fill, reduce_fill_space(fill_space, size))
-                        }
-                        Sizing::Fill => (num_fill + 1, fill_space),
-                    };
-
-                match widget {
-                    WidgetVariant::Complex(complex) => {
-                        let (num_fill, fill_space) = size_complex(complex);
-                        (num_fill, fill_space)
+        /// This function is called in a recursive fold to calculate the size of a widget,
+        /// mutating the original widget to store this information.
+        fn size_widget<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+            bump: &'a Bump,
+            focus_key: FocusKey,
+            reduce_fill_space: &impl Fn(Size, Size) -> Size,
+            (num_fill, fill_space): (u16, Size),
+            Widget(widget): &mut Widget<'a, T, FocusKey, Event, Msg>,
+        ) -> (u16, Size) {
+            let size_complex =
+                |complex: &mut ComplexWidget<'a, T, FocusKey, Event, Msg>| match complex.sizing {
+                    Sizing::Intrinsic => {
+                        let size = complex.intrinsic_size();
+                        complex.size = size;
+                        (num_fill, reduce_fill_space(fill_space, size))
                     }
-                    WidgetVariant::Interactive(interactive) => {
-                        let state = if focus_key == interactive.key {
-                            Some(focus_state)
-                        } else {
-                            None
-                        };
+                    Sizing::Fill => (num_fill + 1, fill_space),
+                };
 
-                        let interior = bump.alloc((interactive.view)(state));
-                        let (num_fill, fill_space) = size_complex(interior);
-                        interactive.evaluated = Some(interior);
-
-                        (num_fill, fill_space)
-                    }
+            match widget {
+                WidgetVariant::Complex(complex) => {
+                    let (num_fill, fill_space) = size_complex(complex);
+                    (num_fill, fill_space)
                 }
+                WidgetVariant::Interactive(interactive) => {
+                    let (num_fill, fill_space) = size_widget(
+                        bump,
+                        focus_key,
+                        reduce_fill_space,
+                        (num_fill, fill_space),
+                        &mut interactive.contents,
+                    );
+
+                    (num_fill, fill_space)
+                }
+            }
+        }
+
+        let (num_fill, fill_space) = self.internals.widgets.iter_mut().fold(
+            (0, available_space),
+            |(num_fill, fill_space), widget| {
+                size_widget(
+                    bump,
+                    focus_key,
+                    &reduce_fill_space,
+                    (num_fill, fill_space),
+                    widget,
+                )
             },
         );
 
-        if num_fill > 0 {
+        let size_per_widget = if num_fill > 0 {
             Some(
                 fill_space
-                    / match self.direction {
+                    / match self.internals.direction {
                         Direction::Horizontal => Size::new(num_fill, 1),
                         Direction::Vertical => Size::new(1, num_fill),
                     },
             )
         } else {
             None
-        }
+        };
+
+        (
+            ViewInternals {
+                widgets: self.internals.widgets,
+                direction: self.internals.direction,
+                phantom: PhantomData,
+            },
+            size_per_widget,
+        )
     }
 
     pub(crate) fn render(
-        mut self,
-        factory: &'a Factory,
+        self,
+        factory: &'a GlobalFactory<FocusKey, Event, Msg>,
         handler_registry: &mut event::HandlerRegistry<FocusKey, Event, Msg>,
         origin: Position,
         available_space: Size,
         focus_key: FocusKey,
-        focus_state: &FocusState,
-        has_focus_changed: bool,
+        previous_focus_key: FocusKey,
         target: &mut T,
         background_color: T::Color,
     ) -> Result<(), T::Error> {
-        let size_per_widget = self
-            .compute_size_per_widget(&factory.bump, available_space, focus_key, focus_state)
-            .unwrap_or(Size::zero());
-        let adjust_position = Self::adjust_position(self.direction);
+        let (sized_view, size_per_widget_option) =
+            self.compute_size_per_widget(&factory.bump(), available_space, focus_key);
+        let size_per_widget = size_per_widget_option.unwrap_or(Size::zero());
+
+        let adjust_position = adjust_position(sized_view.direction);
+
+        fn update_position<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
+            Widget(widget): &mut Widget<'a, T, FocusKey, Event, Msg>,
+            adjust_position: impl Fn(Position, Size) -> Position,
+            size_per_widget: Size,
+            position: Position,
+        ) -> Position {
+            match widget {
+                WidgetVariant::Complex(complex) => match complex.sizing {
+                    Sizing::Intrinsic => adjust_position(position, complex.size),
+                    Sizing::Fill => {
+                        complex.size = size_per_widget;
+
+                        adjust_position(position, complex.size)
+                    }
+                },
+                WidgetVariant::Interactive(interactive) => update_position(
+                    &mut interactive.contents,
+                    adjust_position,
+                    size_per_widget,
+                    position,
+                ),
+            }
+        }
 
         let mut position = Position::zero();
 
-        let mut update_position =
-            |complex: &mut ComplexWidget<'a, T, FocusKey, Event, Msg>| match complex.sizing {
-                Sizing::Intrinsic => {
-                    let current_position = position;
-                    position = adjust_position(position, complex.size);
-                    current_position
-                }
-                Sizing::Fill => {
-                    complex.size = size_per_widget;
-
-                    let current_position = position;
-                    position = adjust_position(position, complex.size);
-                    current_position
-                }
-            };
-
-        for Widget(widget) in self.widgets.iter_mut() {
+        for widget in sized_view.widgets.into_iter() {
             // Safety notes: this *should* be safe since we have explicitly set the
             // evaluated view during the previous pass.
-            let has_changed = unsafe { widget.has_changed(has_focus_changed) };
+            let has_changed = widget.has_changed(focus_key, previous_focus_key);
 
-            let (widget_position, complex) = match widget {
-                WidgetVariant::Complex(complex) => (update_position(complex), complex),
-                WidgetVariant::Interactive(interactive) => {
-                    // Safety notes: same as above
-                    let complex =
-                        unsafe { interactive.evaluated.as_deref_mut().unwrap_unchecked() };
-                    let widget_position = update_position(complex);
+            let new_position = update_position(widget, &adjust_position, size_per_widget, position);
 
-                    // handler_registry.register(interactive.key, interactive.event_handler);
-
-                    // focus_items.push(FocusItem {
-                    //     position: widget_position,
-                    //     key: interactive.key,
-                    // });
-
-                    (widget_position, complex)
-                }
-            };
+            let complex = widget.register_handlers(handler_registry);
 
             if has_changed {
                 match &mut complex.inner {
@@ -431,19 +728,16 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> View<'a, T, Focu
                         view.render(
                             factory,
                             handler_registry,
-                            origin + widget_position,
+                            origin + position,
                             complex.size,
                             focus_key,
-                            focus_state,
-                            has_focus_changed,
+                            previous_focus_key,
                             target,
                             background_color,
                         )?;
-
-                        // focus_items.extend(view_focus_items);
                     }
                     ComplexWidgetVariant::Primitive(primitive) => {
-                        match LocalTarget::try_new(target, origin + widget_position, complex.size) {
+                        match LocalTarget::try_new(target, origin + position, complex.size) {
                             Some(mut local_target) => {
                                 primitive.draw(&mut local_target)?;
                             }
@@ -452,6 +746,8 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> View<'a, T, Focu
                     }
                 }
             }
+
+            position = new_position;
         }
 
         // Ok(focus_items)

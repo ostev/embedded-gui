@@ -7,15 +7,15 @@ use crate::{
     interactive,
     layout::IntrinsicSize,
     signal::Reactive,
-    view::{self, View, Widget},
+    view::{GlobalFactory, View, Widget},
 };
 
-pub trait Component<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>:
+pub trait Component<'a, T: DrawTarget, Event, GlobalMsg, GlobalFocusKey: interactive::Key>:
     Reactive + IntrinsicSize
 {
     fn view(
         &self,
-        v: &'a view::Factory,
-        children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
-    ) -> View<'a, T, FocusKey, Event, Msg>;
+        v: &'a GlobalFactory<GlobalFocusKey, Event, GlobalMsg>,
+        children: &'a mut [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>],
+    ) -> View<'a, T, GlobalFocusKey, Event, GlobalMsg>;
 }

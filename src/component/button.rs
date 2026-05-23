@@ -36,7 +36,7 @@ impl<
 {
     fn view(
         &self,
-        v: &'a crate::view::GlobalFactory<FocusKey, Event, Msg>,
+        v: &'a crate::view::Factory<FocusKey, Event, Msg>,
         _children: &mut [crate::view::Widget<'a, T, FocusKey, Event, Msg>],
     ) -> crate::view::View<'a, T, FocusKey, Event, Msg> {
         v.view(

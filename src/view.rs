@@ -103,27 +103,11 @@ enum WidgetVariant<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
 impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
     WidgetVariant<'a, T, FocusKey, Event, Msg>
 {
-    /// Registers all the event handlers for a given widget, returning the complex widget
-    /// inside it.
-    ///
-    /// ### Safety notes
-    /// This method **must not** be called more than once.
-    fn register_handlers(
-        &mut self,
-        registry: &mut HandlerRegistry<FocusKey, Event, Msg>,
-    ) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg> {
+    /// Returns the nested complex widget inside a widget variant
+    fn complex(&mut self) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg> {
         match self {
             WidgetVariant::Complex(complex) => complex,
-            WidgetVariant::Interactive(interactive) => {
-                interactive.contents.register_handlers(registry)
-            }
-        }
-    }
-
-    fn get_complex(&self) -> &ComplexWidget<'a, T, FocusKey, Event, Msg> {
-        match self {
-            WidgetVariant::Complex(complex) => complex,
-            WidgetVariant::Interactive(interactive) => interactive.contents.0.get_complex(),
+            WidgetVariant::Interactive(interactive) => interactive.contents.complex(),
         }
     }
 
@@ -219,146 +203,12 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
         self.0.has_changed(focus_key, previous_focus_key)
     }
 
-    fn register_handlers(
-        &mut self,
-        registry: &mut HandlerRegistry<FocusKey, Event, Msg>,
-    ) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg> {
-        self.0.register_handlers(registry)
+    fn complex(&mut self) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg> {
+        self.0.complex()
     }
 }
 
-pub trait Factory<FocusKey: interactive::Key, Event, Msg> {
-    fn bump(&self) -> &Bump;
-
-    // fn map<OtherMsg>(
-    //     &mut self,
-    //     msg: impl Fn(OtherMsg) -> Msg + 'static,
-    // ) -> impl Factory<FocusKey, Event, OtherMsg>;
-
-    // fn map_focus<OtherFocusKey: interactive::Key>(
-    //     &mut self,
-    //     key: impl Fn(OtherFocusKey) -> FocusKey + 'static,
-    // ) -> impl Factory<OtherFocusKey, Event, Msg>;
-
-    fn component<'a, const N: usize, T: DrawTarget>(
-        &'a self,
-        sizing: Sizing,
-        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
-        children: [Widget<'a, T, FocusKey, Event, Msg>; N],
-    ) -> Widget<'a, T, FocusKey, Event, Msg> {
-        Widget(WidgetVariant::component(
-            self.bump(),
-            component,
-            sizing,
-            children,
-        ))
-    }
-
-    fn component_ref<'a, T: DrawTarget>(
-        &'a self,
-        sizing: Sizing,
-        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
-        children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
-    ) -> Widget<'a, T, FocusKey, Event, Msg> {
-        Widget(WidgetVariant::component_ref(
-            self.bump(),
-            component,
-            sizing,
-            children,
-        ))
-    }
-
-    fn primitive<'a, T: DrawTarget>(
-        &'a self,
-        sizing: Sizing,
-        primitive: impl Primitive<T> + 'a,
-    ) -> Widget<'a, T, FocusKey, Event, Msg> {
-        Widget(WidgetVariant::primitive(self.bump(), primitive, sizing))
-    }
-
-    // fn interactive<'a, T: DrawTarget>(
-    //     &'a mut self,
-    //     key: FocusKey,
-    //     event_handler: impl Fn(Event) -> Msg + 'static,
-    //     view: impl FnOnce(Option<FocusState>) -> Widget<'a, T, FocusKey, Event, Msg>,
-    // ) -> Widget<'a, T, FocusKey, Event, Msg>;
-
-    fn view<'a, const N: usize, T: DrawTarget>(
-        &'a self,
-        direction: Direction,
-        children: [Widget<'a, T, FocusKey, Event, Msg>; N],
-    ) -> View<'a, T, FocusKey, Event, Msg> {
-        View {
-            internals: ViewInternals {
-                widgets: self.bump().alloc(children),
-                direction,
-                phantom: PhantomData,
-            },
-        }
-    }
-
-    fn view_ref<'a, T: DrawTarget>(
-        &self,
-        direction: Direction,
-        children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
-    ) -> View<'a, T, FocusKey, Event, Msg> {
-        View {
-            internals: ViewInternals {
-                widgets: children,
-                direction,
-                phantom: PhantomData,
-            },
-        }
-    }
-
-    fn spacer<'a, T: DrawTarget>(&'a self) -> Widget<'a, T, FocusKey, Event, Msg> {
-        self.primitive(Sizing::Fill, Spacer::zero())
-    }
-
-    fn group<'a, const N: usize, T: DrawTarget>(
-        &'a self,
-        direction: Direction,
-        children: [Widget<'a, T, FocusKey, Event, Msg>; N],
-    ) -> Widget<'a, T, FocusKey, Event, Msg> {
-        self.component(
-            Sizing::Fill,
-            Group::zero(SignalRef::owned(direction)),
-            children,
-        )
-    }
-
-    fn group_ref<'a, T: DrawTarget>(
-        &'a self,
-        direction: Direction,
-        children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
-    ) -> Widget<'a, T, FocusKey, Event, Msg> {
-        self.component_ref(
-            Sizing::Fill,
-            Group::zero(SignalRef::owned(direction)),
-            children,
-        )
-    }
-
-    fn centered<'a, T: DrawTarget>(
-        &'a self,
-        direction: Direction,
-        widget: Widget<'a, T, FocusKey, Event, Msg>,
-    ) -> Widget<'a, T, FocusKey, Event, Msg> {
-        self.group(direction, [self.spacer(), widget, self.spacer()])
-    }
-
-    fn middle<'a, T: DrawTarget>(
-        &'a self,
-        widget: Widget<'a, T, FocusKey, Event, Msg>,
-    ) -> Widget<'a, T, FocusKey, Event, Msg> {
-        self.centered(
-            Direction::Vertical,
-            self.centered(Direction::Horizontal, widget),
-        )
-    }
-}
-
-pub(crate) struct GlobalFactory<GlobalFocusKey: interactive::Key, Event, GlobalMsg> {
+pub struct Factory<GlobalFocusKey: interactive::Key, Event, GlobalMsg> {
     pub bump: Bump,
 
     handler_registry: HandlerRegistry<GlobalFocusKey, Event, GlobalMsg>,
@@ -367,9 +217,7 @@ pub(crate) struct GlobalFactory<GlobalFocusKey: interactive::Key, Event, GlobalM
     focus_state: FocusState,
 }
 
-impl<GlobalFocusKey: interactive::Key, Event, GlobalMsg>
-    GlobalFactory<GlobalFocusKey, Event, GlobalMsg>
-{
+impl<GlobalFocusKey: interactive::Key, Event, GlobalMsg> Factory<GlobalFocusKey, Event, GlobalMsg> {
     pub fn new(focus_key: GlobalFocusKey) -> Self {
         Self {
             bump: Bump::new(),
@@ -409,122 +257,111 @@ impl<GlobalFocusKey: interactive::Key, Event, GlobalMsg>
             self.bump.alloc(contents),
         ))
     }
-}
 
-impl<FocusKey: interactive::Key, Event, Msg> Factory<FocusKey, Event, Msg>
-    for GlobalFactory<FocusKey, Event, Msg>
-{
-    #[inline(always)]
-    fn bump(&self) -> &Bump {
-        &self.bump
+    pub fn component<'a, const N: usize, T: DrawTarget>(
+        &'a self,
+        sizing: Sizing,
+        component: impl Component<'a, T, Event, GlobalMsg, GlobalFocusKey> + 'a,
+        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>; N],
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        Widget(WidgetVariant::component(
+            &self.bump, component, sizing, children,
+        ))
     }
 
-    // #[inline]
-    // fn map<OtherMsg>(
-    //     &mut self,
-    //     f: impl Fn(OtherMsg) -> Msg + 'static,
-    // ) -> impl Factory<FocusKey, Event, OtherMsg> {
-    //     LocalFactory {
-    //         global: self,
-    //         map_msg: Rc::new(f),
-    //         map_focus: Rc::new(|key| key),
-    //         phantom: PhantomData,
-    //     }
-    // }
+    pub fn component_ref<'a, T: DrawTarget>(
+        &'a self,
+        sizing: Sizing,
+        component: impl Component<'a, T, Event, GlobalMsg, GlobalFocusKey> + 'a,
+        children: &'a mut [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>],
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        Widget(WidgetVariant::component_ref(
+            &self.bump, component, sizing, children,
+        ))
+    }
 
-    // #[inline]
-    // fn map_focus<OtherFocus: interactive::Key>(
-    //     &mut self,
-    //     f: impl Fn(OtherFocus) -> FocusKey + 'static,
-    // ) -> impl Factory<OtherFocus, Event, Msg> {
-    //     LocalFactory {
-    //         global: self,
-    //         map_msg: Rc::new(|msg| msg),
-    //         map_focus: Rc::new(f),
-    //         phantom: PhantomData,
-    //     }
-    // }
+    pub fn primitive<'a, T: DrawTarget>(
+        &'a self,
+        sizing: Sizing,
+        primitive: impl Primitive<T> + 'a,
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        Widget(WidgetVariant::primitive(&self.bump, primitive, sizing))
+    }
+
+    pub fn view<'a, const N: usize, T: DrawTarget>(
+        &'a self,
+        direction: Direction,
+        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>; N],
+    ) -> View<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        View {
+            internals: ViewInternals {
+                widgets: self.bump.alloc(children),
+                direction,
+                phantom: PhantomData,
+            },
+        }
+    }
+
+    pub fn view_ref<'a, T: DrawTarget>(
+        &self,
+        direction: Direction,
+        children: &'a mut [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>],
+    ) -> View<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        View {
+            internals: ViewInternals {
+                widgets: children,
+                direction,
+                phantom: PhantomData,
+            },
+        }
+    }
+
+    pub fn spacer<'a, T: DrawTarget>(&'a self) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        self.primitive(Sizing::Fill, Spacer::zero())
+    }
+
+    pub fn group<'a, const N: usize, T: DrawTarget>(
+        &'a self,
+        direction: Direction,
+        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>; N],
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        self.component(
+            Sizing::Fill,
+            Group::zero(SignalRef::owned(direction)),
+            children,
+        )
+    }
+
+    pub fn group_ref<'a, T: DrawTarget>(
+        &'a self,
+        direction: Direction,
+        children: &'a mut [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>],
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        self.component_ref(
+            Sizing::Fill,
+            Group::zero(SignalRef::owned(direction)),
+            children,
+        )
+    }
+
+    pub fn centered<'a, T: DrawTarget>(
+        &'a self,
+        direction: Direction,
+        widget: Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>,
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        self.group(direction, [self.spacer(), widget, self.spacer()])
+    }
+
+    pub fn middle<'a, T: DrawTarget>(
+        &'a self,
+        widget: Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>,
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        self.centered(
+            Direction::Vertical,
+            self.centered(Direction::Horizontal, widget),
+        )
+    }
 }
-
-// pub struct LocalFactory<
-//     'a,
-//     FocusKey: Into<GlobalFocusKey>,
-//     Event,
-//     Msg: Into<GlobalMsg>,
-//     GlobalMsg,
-//     GlobalFocusKey: interactive::Key,
-// > {
-//     /// A reference to the global factory, which contains the bump allocator and
-//     /// handler registry
-//     global: &'a mut GlobalFactory<GlobalFocusKey, Event, GlobalMsg>,
-//     // /// Transforms the child views' messages into something that the global factory can understand.
-//     // map_msg: Rc<dyn Fn(Msg) -> GlobalMsg>,
-//     // /// Transforms the child view's focus keys into something that the global factory can understand.
-//     // map_focus: Rc<dyn Fn(FocusKey) -> GlobalFocusKey>,
-//     /// Since this struct doesn't actually contain a `FocusKey` or a `Msg`, we need
-//     /// a phantom data marker.
-//     phantom: PhantomData<(FocusKey, Msg)>,
-// }
-
-// impl<
-//     'a,
-//     FocusKey: Into<GlobalFocusKey>,
-//     Event,
-//     Msg: Into<GlobalMsg>,
-//     GlobalMsg,
-//     GlobalFocusKey: interactive::Key,
-// > LocalFactory<'a, FocusKey, Event, Msg, GlobalMsg, GlobalFocusKey>
-// {
-
-// }
-
-// impl<
-//     'a,
-//     FocusKey: Into<GlobalFocusKey>,
-//     Event,
-//     Msg: Into<GlobalMsg>,
-//     GlobalMsg,
-//     GlobalFocusKey: interactive::Key,
-// > Factory<GlobalFocusKey, Event, Msg>
-//     for LocalFactory<'a, FocusKey, Event, Msg, GlobalMsg, GlobalFocusKey>
-// {
-//     #[inline(always)]
-//     fn bump(&self) -> &Bump {
-//         &self.global.bump
-//     }
-
-// #[inline]
-// fn map<OtherMsg>(
-//     &mut self,
-//     f: impl Fn(OtherMsg) -> Msg + 'static,
-// ) -> impl Factory<FocusKey, Event, OtherMsg> {
-//     let map_msg = self.map_msg.clone();
-//     let map_focus = &self.map_focus;
-
-//     LocalFactory {
-//         global: self.global,
-//         map_msg: Rc::new(move |msg| map_msg(f(msg))),
-//         map_focus: move |key| map_focus(key),
-//         phantom: PhantomData,
-//     }
-// }
-
-// #[inline]
-// fn map_focus<OtherFocusKey: interactive::Key>(
-//     &mut self,
-//     f: impl Fn(OtherFocusKey) -> FocusKey,
-// ) -> impl Factory<OtherFocusKey, Event, Msg> {
-//     let map_msg = self.map_msg.clone();
-//     let map_focus = &self.map_focus;
-
-//     LocalFactory {
-//         global: self.global,
-//         map_msg: Rc::new(move |msg| map_msg(msg)),
-//         map_focus: move |key| map_focus(f(key)),
-//         phantom: PhantomData,
-//     }
-// }
-// }
 
 /// Represents a collection of widgets laid out in a set direction.
 pub struct View<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
@@ -670,8 +507,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> View<'a, T, Focu
 
     pub(crate) fn render(
         self,
-        factory: &'a GlobalFactory<FocusKey, Event, Msg>,
-        handler_registry: &mut event::HandlerRegistry<FocusKey, Event, Msg>,
+        factory: &'a Factory<FocusKey, Event, Msg>,
         origin: Position,
         available_space: Size,
         focus_key: FocusKey,
@@ -680,7 +516,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> View<'a, T, Focu
         background_color: T::Color,
     ) -> Result<(), T::Error> {
         let (sized_view, size_per_widget_option) =
-            self.compute_size_per_widget(&factory.bump(), available_space, focus_key);
+            self.compute_size_per_widget(&factory.bump, available_space, focus_key);
         let size_per_widget = size_per_widget_option.unwrap_or(Size::zero());
 
         let adjust_position = adjust_position(sized_view.direction);
@@ -718,7 +554,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> View<'a, T, Focu
 
             let new_position = update_position(widget, &adjust_position, size_per_widget, position);
 
-            let complex = widget.register_handlers(handler_registry);
+            let complex = widget.complex();
 
             if has_changed {
                 match &mut complex.inner {
@@ -727,7 +563,6 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> View<'a, T, Focu
 
                         view.render(
                             factory,
-                            handler_registry,
                             origin + position,
                             complex.size,
                             focus_key,

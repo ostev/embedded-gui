@@ -35,7 +35,7 @@ impl<'a, 'model, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
 {
     fn view(
         &self,
-        v: &'a crate::view::GlobalFactory<FocusKey, Event, Msg>,
+        v: &'a crate::view::Factory<FocusKey, Event, Msg>,
         children: &'a mut [crate::view::Widget<'a, T, FocusKey, Event, Msg>],
     ) -> crate::view::View<'a, T, FocusKey, Event, Msg> {
         v.view_ref(*self.direction, children)

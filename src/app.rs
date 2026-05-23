@@ -24,55 +24,51 @@ pub trait App {
     ) -> View<'a, Self::Target, Self::FocusKey, Self::Event, Self::Msg>;
 }
 
-pub struct InternalState<FocusKey: interactive::Key> {
+pub struct InternalState<FocusKey: interactive::Key, Event, Msg> {
     current_focus_key: FocusKey,
     previous_focus_key: Option<FocusKey>,
+    factory: Factory<FocusKey, Event, Msg>,
 }
 
-pub async fn start<A: App, FutureEvent: Future<Output = impl Iterator<Item = A::Event>>>(
-    mut app: A,
-    display: &mut A::Target,
-    mut receive_event: impl FnMut() -> FutureEvent,
-    mut after_render: impl FnMut(),
-) -> Result<(), <A::Target as DrawTarget>::Error> {
-    let initial_focus_key = A::initial_focus_key();
-
-    let mut factory = Factory::new(initial_focus_key);
-
-    let mut internal_state = InternalState {
-        current_focus_key: initial_focus_key,
-        previous_focus_key: None,
-    };
-
-    loop {
-        render(&app, &mut factory, &mut internal_state, display)?;
-        after_render();
-
-        let events = receive_event().await;
-
-        for event in events {
-            let updated_focus = factory.dispatch(event).and_then(|msg| app.update(msg));
-
-            updated_focus.map(|(key, state)| {
-                internal_state.previous_focus_key = Some(internal_state.current_focus_key);
-                internal_state.current_focus_key = key;
-
-                factory.set_focus(key, state);
-            });
+impl<FocusKey: interactive::Key, Event, Msg> InternalState<FocusKey, Event, Msg> {
+    pub fn new(focus_key: FocusKey) -> Self {
+        Self {
+            current_focus_key: focus_key,
+            previous_focus_key: None,
+            factory: Factory::new(focus_key),
         }
     }
 }
 
-fn render<A: App>(
+pub fn dispatch<A: App>(
+    app: &mut A,
+    internal_state: &mut InternalState<A::FocusKey, A::Event, A::Msg>,
+    events: impl IntoIterator<Item = A::Event>,
+) {
+    for event in events {
+        let updated_focus = internal_state
+            .factory
+            .dispatch(event)
+            .and_then(|msg| app.update(msg));
+
+        updated_focus.map(|(key, state)| {
+            internal_state.previous_focus_key = Some(internal_state.current_focus_key);
+            internal_state.current_focus_key = key;
+
+            internal_state.factory.set_focus(key, state);
+        });
+    }
+}
+
+pub fn render<A: App>(
     app: &A,
-    factory: &mut view::Factory<A::FocusKey, A::Event, A::Msg>,
-    internal_state: &mut InternalState<A::FocusKey>,
+    internal_state: &mut InternalState<A::FocusKey, A::Event, A::Msg>,
     display: &mut A::Target,
 ) -> Result<(), <A::Target as DrawTarget>::Error> {
-    let view = app.view(factory);
+    let view = app.view(&internal_state.factory);
 
     let output = view.render(
-        factory,
+        &internal_state.factory,
         Position::zero(),
         display.bounding_box().size.into(),
         internal_state.current_focus_key,
@@ -81,7 +77,7 @@ fn render<A: App>(
         A::background_color(),
     );
 
-    factory.bump.reset();
+    internal_state.factory.bump.reset();
 
     output
 }

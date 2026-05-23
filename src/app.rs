@@ -29,7 +29,7 @@ pub struct InternalState<FocusKey: interactive::Key> {
     previous_focus_key: Option<FocusKey>,
 }
 
-pub async fn start<A: App, FutureEvent: Future<Output = A::Event>>(
+pub async fn start<A: App, FutureEvent: Future<Output = impl Iterator<Item = A::Event>>>(
     mut app: A,
     display: &mut A::Target,
     mut receive_event: impl FnMut() -> FutureEvent,
@@ -48,16 +48,18 @@ pub async fn start<A: App, FutureEvent: Future<Output = A::Event>>(
         render(&app, &mut factory, &mut internal_state, display)?;
         after_render();
 
-        let event = receive_event().await;
+        let events = receive_event().await;
 
-        let updated_focus = factory.dispatch(event).and_then(|msg| app.update(msg));
+        for event in events {
+            let updated_focus = factory.dispatch(event).and_then(|msg| app.update(msg));
 
-        updated_focus.map(|(key, state)| {
-            internal_state.previous_focus_key = Some(internal_state.current_focus_key);
-            internal_state.current_focus_key = key;
+            updated_focus.map(|(key, state)| {
+                internal_state.previous_focus_key = Some(internal_state.current_focus_key);
+                internal_state.current_focus_key = key;
 
-            factory.set_focus(key, state);
-        });
+                factory.set_focus(key, state);
+            });
+        }
     }
 }
 

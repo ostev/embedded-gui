@@ -1,9 +1,9 @@
 use embedded_graphics::prelude::{Dimensions, DrawTarget};
 
 use crate::{
-    interactive,
+    interactive::{self, FocusState},
     position::Position,
-    view::{self, View},
+    view::{self, Factory, View},
 };
 
 pub trait App {
@@ -14,23 +14,53 @@ pub trait App {
 
     fn init() -> Self;
 
-    fn default_focus_state() -> interactive::FocusState;
-    fn default_focus_key() -> Self::FocusKey;
+    fn initial_focus_key() -> Self::FocusKey;
 
     fn background_color() -> <Self::Target as DrawTarget>::Color;
-    fn update(&mut self, msg: Self::Msg);
+    fn update(&mut self, msg: Self::Msg) -> Option<(Self::FocusKey, FocusState)>;
     fn view<'a>(
         &'a self,
         v: &'a view::Factory<Self::FocusKey, Self::Event, Self::Msg>,
     ) -> View<'a, Self::Target, Self::FocusKey, Self::Event, Self::Msg>;
+
+    fn receive_event() -> impl Future<Output = Self::Event>;
 }
 
 pub struct InternalState<FocusKey: interactive::Key> {
     current_focus_key: FocusKey,
-    previous_focus_key: FocusKey,
+    previous_focus_key: Option<FocusKey>,
 }
 
-pub fn render<A: App>(
+pub async fn start<A: App>(
+    mut app: A,
+    display: &mut A::Target,
+) -> Result<(), <A::Target as DrawTarget>::Error> {
+    let initial_focus_key = A::initial_focus_key();
+
+    let mut factory = Factory::new(initial_focus_key);
+
+    let mut internal_state = InternalState {
+        current_focus_key: initial_focus_key,
+        previous_focus_key: None,
+    };
+
+    loop {
+        render(&app, &mut factory, &mut internal_state, display)?;
+
+        let event = A::receive_event().await;
+
+        let updated_focus = factory.dispatch(event).and_then(|msg| app.update(msg));
+
+        updated_focus.map(|(key, state)| {
+            internal_state.previous_focus_key = Some(internal_state.current_focus_key);
+            internal_state.current_focus_key = key;
+
+            factory.set_focus(key, state);
+        });
+    }
+}
+
+fn render<A: App>(
     app: &A,
     factory: &mut view::Factory<A::FocusKey, A::Event, A::Msg>,
     internal_state: &mut InternalState<A::FocusKey>,

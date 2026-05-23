@@ -27,11 +27,11 @@ impl App for MyApp {
     type Event = ();
     type FocusKey = ();
 
-    fn default_focus_state() -> embedded_gui::interactive::FocusState {
+    fn initial_focus_state() -> embedded_gui::interactive::FocusState {
         embedded_gui::interactive::FocusState::Unfocused
     }
 
-    fn default_focus_key() -> Self::FocusKey {
+    fn initial_focus_key() -> Self::FocusKey {
         ()
     }
 

@@ -37,7 +37,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
     /// Determines whether a complex widget variant has changed and needs
     /// to be updated.
 
-    fn has_changed(&self, focus_key: FocusKey, previous_focus_key: FocusKey) -> bool {
+    fn has_changed(&self, focus_key: FocusKey, previous_focus_key: Option<FocusKey>) -> bool {
         match self {
             ComplexWidgetVariant::Component(component, children) => {
                 component.has_changed()
@@ -112,13 +112,14 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
     }
 
     /// Determines whether a widget variant has changed and needs to be updated.
-    fn has_changed(&self, focus_key: FocusKey, previous_focus_key: FocusKey) -> bool {
+    fn has_changed(&self, focus_key: FocusKey, previous_focus_key: Option<FocusKey>) -> bool {
         match self {
             Self::Complex(complex) => complex.inner.has_changed(focus_key, previous_focus_key),
             Self::Interactive(interactive) => {
-                let has_focus_changed = focus_key != previous_focus_key;
+                let has_focus_changed = Some(focus_key) != previous_focus_key;
                 (has_focus_changed
-                    && (interactive.key == focus_key || interactive.key == previous_focus_key))
+                    && (interactive.key == focus_key
+                        || Some(interactive.key) == previous_focus_key))
                     || interactive
                         .contents
                         .has_changed(focus_key, previous_focus_key)
@@ -199,7 +200,7 @@ pub struct Widget<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
 impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
     Widget<'a, T, FocusKey, Event, Msg>
 {
-    fn has_changed(&self, focus_key: FocusKey, previous_focus_key: FocusKey) -> bool {
+    fn has_changed(&self, focus_key: FocusKey, previous_focus_key: Option<FocusKey>) -> bool {
         self.0.has_changed(focus_key, previous_focus_key)
     }
 
@@ -227,9 +228,13 @@ impl<GlobalFocusKey: interactive::Key, Event, GlobalMsg> Factory<GlobalFocusKey,
         }
     }
 
-    pub fn set_focus(&mut self, key: GlobalFocusKey, state: FocusState) {
+    pub(crate) fn set_focus(&mut self, key: GlobalFocusKey, state: FocusState) {
         self.focus_key = key;
         self.focus_state = state;
+    }
+
+    pub(crate) fn dispatch(&self, event: Event) -> Option<GlobalMsg> {
+        self.handler_registry.dispatch(&self.focus_key, event)
     }
 
     pub fn interactive<'b, T: DrawTarget, FocusKey: Into<GlobalFocusKey>, Msg: Into<GlobalMsg>>(
@@ -511,7 +516,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> View<'a, T, Focu
         origin: Position,
         available_space: Size,
         focus_key: FocusKey,
-        previous_focus_key: FocusKey,
+        previous_focus_key: Option<FocusKey>,
         target: &mut T,
         background_color: T::Color,
     ) -> Result<(), T::Error> {

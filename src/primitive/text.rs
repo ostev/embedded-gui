@@ -13,15 +13,10 @@ use crate::{
     size::Size,
 };
 
+#[derive(Reactive)]
 pub struct Text<'model, Color: PixelColor, S: AsRef<str>> {
     pub content: SignalRef<'model, S>,
     pub font_style: SignalRef<'model, MonoTextStyle<'static, Color>>,
-}
-
-impl<'model, 'a, Color: PixelColor, S: AsRef<str>> Reactive for Text<'model, Color, S> {
-    fn has_changed(&self) -> bool {
-        true
-    }
 }
 
 impl<'model, 'a, Color: PixelColor, S: AsRef<str>> IntrinsicSize for Text<'model, Color, S> {

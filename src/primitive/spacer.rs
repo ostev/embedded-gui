@@ -1,7 +1,8 @@
-use crate::Reactive;
 use embedded_graphics::draw_target::DrawTarget;
 
-use crate::{layout::IntrinsicSize, primitive::Primitive, signal::SignalRef, size::Size};
+use crate::{
+    layout::IntrinsicSize, primitive::Primitive, signal::Reactive, signal::SignalRef, size::Size,
+};
 
 #[derive(Reactive)]
 pub struct Spacer<'model> {

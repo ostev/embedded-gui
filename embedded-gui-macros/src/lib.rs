@@ -34,14 +34,14 @@ fn fields_have_changed(data: &syn::Data) -> TokenStream {
         syn::Data::Struct(ref data) => match data.fields {
             Fields::Named(ref fields) => {
                 if fields.named.len() > 0 {
-                    let recurse = fields.named.iter().map(|field| {
+                    let method_calls = fields.named.iter().map(|field| {
                         let name = &field.ident;
                         quote_spanned! {field.span() =>
                             ::embedded_gui::signal::Reactive::has_changed(&self.#name)
                         }
                     });
                     quote! {
-                        #(#recurse)&*
+                        #(#method_calls)&*
                     }
                 } else {
                     quote!(false)
@@ -49,14 +49,14 @@ fn fields_have_changed(data: &syn::Data) -> TokenStream {
             }
             Fields::Unnamed(ref fields) => {
                 if fields.unnamed.len() > 0 {
-                    let recurse = fields.unnamed.iter().enumerate().map(|(i, field)| {
+                    let method_calls = fields.unnamed.iter().enumerate().map(|(i, field)| {
                         let index = syn::Index::from(i);
                         quote_spanned! {field.span() =>
                             ::embedded_gui::signal::Reactive::has_changed(&self.#index)
                         }
                     });
                     quote! {
-                        #(#recurse)&*
+                        #(#method_calls)&*
                     }
                 } else {
                     quote!(false)
@@ -64,6 +64,63 @@ fn fields_have_changed(data: &syn::Data) -> TokenStream {
             }
             Fields::Unit => {
                 quote!(false)
+            }
+        },
+        syn::Data::Enum(_) | syn::Data::Union(_) => unimplemented!(),
+    }
+}
+
+#[proc_macro_derive(State)]
+pub fn derive_state(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let name = input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let mark_resolved = mark_fields_resolved(&input.data);
+
+    let expanded = quote! {
+        impl #impl_generics ::embedded_gui::app::State for #name #ty_generics #where_clause {
+            fn has_changed(&self) -> bool {
+                #mark_resolved
+            }
+        }
+    };
+
+    proc_macro::TokenStream::from(expanded)
+}
+
+fn mark_fields_resolved(data: &syn::Data) -> TokenStream {
+    match *data {
+        syn::Data::Struct(ref data) => match data.fields {
+            Fields::Named(ref fields) => {
+                if fields.named.len() > 0 {
+                    let method_calls = fields.named.iter().map(|field| {
+                        let name = &field.ident;
+                        quote_spanned! {field.span() =>
+                            ::embedded_gui::app::State::mark_resolved(&mut self.#name);
+                        }
+                    });
+                    quote! {
+                        #(#method_calls)*
+                    }
+                } else {
+                    quote!(false)
+                }
+            }
+            Fields::Unnamed(ref fields) => {
+                let method_calls = fields.unnamed.iter().enumerate().map(|(i, field)| {
+                    let index = syn::Index::from(i);
+                    quote_spanned! {field.span() =>
+                        ::embedded_gui::app::State::mark_resolved(&mut self.#index);
+                    }
+                });
+                quote! {
+                    #(#method_calls)*
+                }
+            }
+            Fields::Unit => {
+                quote!({})
             }
         },
         syn::Data::Enum(_) | syn::Data::Union(_) => unimplemented!(),

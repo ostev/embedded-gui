@@ -1,12 +1,11 @@
 use embedded_graphics::{draw_target::DrawTarget, mono_font::MonoTextStyle, prelude::PixelColor};
 
 use crate::{
-    Reactive,
     component::Component,
     interactive,
     layout::{Direction, IntrinsicSize, Sizing},
     primitive::text::Text,
-    signal::SignalRef,
+    signal::{Reactive, SignalRef},
     size::Size,
 };
 

@@ -6,7 +6,7 @@ use crate::{
     view::{self, Factory, View},
 };
 
-pub trait App {
+pub trait App: State {
     type Target: DrawTarget;
     type Msg;
     type Event;
@@ -22,6 +22,10 @@ pub trait App {
         &'a self,
         v: &'a view::Factory<Self::FocusKey, Self::Event, Self::Msg>,
     ) -> View<'a, Self::Target, Self::FocusKey, Self::Event, Self::Msg>;
+}
+
+pub trait State {
+    fn mark_resolved(&mut self);
 }
 
 pub struct InternalState<FocusKey: interactive::Key, Event, Msg> {
@@ -61,7 +65,7 @@ pub fn dispatch<A: App>(
 }
 
 pub fn render<A: App>(
-    app: &A,
+    app: &mut A,
     internal_state: &mut InternalState<A::FocusKey, A::Event, A::Msg>,
     display: &mut A::Target,
 ) -> Result<(), <A::Target as DrawTarget>::Error> {

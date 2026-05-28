@@ -1,11 +1,10 @@
 use embedded_graphics::draw_target::DrawTarget;
 
 use crate::{
-    Reactive,
     component::Component,
     interactive,
     layout::{Direction, IntrinsicSize},
-    signal::SignalRef,
+    signal::{Reactive, SignalRef},
     size::Size,
 };
 

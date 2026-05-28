@@ -3,6 +3,8 @@ use core::{fmt::Debug, ops::Deref};
 use alloc::rc::Rc;
 use bumpalo::{Bump, boxed::Box};
 
+pub use embedded_gui_macros::Reactive;
+
 pub trait Reactive {
     fn has_changed(&self) -> bool;
 }
@@ -25,7 +27,7 @@ impl<T> Signal<T> {
     pub fn new(value: T) -> Self {
         Self {
             value,
-            has_changed: false,
+            has_changed: true,
         }
     }
 
@@ -44,7 +46,8 @@ impl<T> Signal<T> {
         self.has_changed = true;
     }
 
-    pub(crate) fn mark_resolved(&mut self) {
+    #[inline(always)]
+    pub fn mark_resolved(&mut self) {
         self.has_changed = false;
     }
 

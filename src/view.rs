@@ -1,4 +1,4 @@
-use core::marker::PhantomData;
+use core::{any::Any, marker::PhantomData};
 
 use alloc::boxed::Box;
 use bumpalo::Bump;
@@ -16,16 +16,26 @@ use crate::{
     size::Size,
 };
 
-enum ComplexWidgetVariant<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
-    Component(
-        &'a dyn Component<'a, T, Event, Msg, FocusKey>,
-        &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
-    ),
+enum ComplexWidgetVariant<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+> {
+    Component(AnyComponent, &'a mut [Widget<'a, T, FocusKey, Event, Msg>]),
     Primitive(&'a dyn Primitive<T>),
 }
 
-impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
-    ComplexWidgetVariant<'a, T, FocusKey, Event, Msg>
+impl<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+> ComplexWidgetVariant<'a, T, FocusKey, Event, Msg, AnyComponent>
 {
     fn intrinsic_size(&self) -> Size {
         match self {
@@ -53,58 +63,96 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
         Self::Primitive(bump.alloc(primitive))
     }
 
-    fn component<const N: usize>(
+    fn component<const N: usize, C: Component<'a, T, Event, Msg, FocusKey> + 'a>(
         bump: &'a Bump,
-        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
-        children: [Widget<'a, T, FocusKey, Event, Msg>; N],
-    ) -> Self {
-        Self::Component(bump.alloc(component), bump.alloc(children))
-    }
-
-    fn component_ref(
-        bump: &'a Bump,
-        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
-        children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
-    ) -> Self {
-        Self::Component(bump.alloc(component), children)
+        component: C,
+        children: [Widget<'a, T, FocusKey, Event, Msg, AnyComponent>; N],
+    ) -> Self
+    where
+        bumpalo::boxed::Box<'a, C>: Into<AnyComponent>,
+    {
+        Self::Component(
+            bumpalo::boxed::Box::new_in(component, bump).into(),
+            bump.alloc(children),
+        )
     }
 }
 
-struct ComplexWidget<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
-    inner: ComplexWidgetVariant<'a, T, FocusKey, Event, Msg>,
+struct ComplexWidget<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+> {
+    inner: ComplexWidgetVariant<'a, T, FocusKey, Event, Msg, AnyComponent>,
     sizing: Sizing,
     size: Size,
 }
 
-impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
-    ComplexWidget<'a, T, FocusKey, Event, Msg>
+impl<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+> ComplexWidget<'a, T, FocusKey, Event, Msg, AnyComponent>
 {
     fn intrinsic_size(&self) -> Size {
         self.inner.intrinsic_size()
     }
 }
 
-struct InteractiveWidget<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
+struct InteractiveWidget<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+> {
     key: FocusKey,
 
-    contents: &'a mut Widget<'a, T, FocusKey, Event, Msg>,
+    contents: &'a mut Widget<'a, T, FocusKey, Event, Msg, AnyComponent>,
 }
 
-struct LayeredWidget<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
-    layers: &'a [Widget<'a, T, FocusKey, Event, Msg>],
+struct LayeredWidget<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+> {
+    layers: &'a [Widget<'a, T, FocusKey, Event, Msg, AnyComponent>],
 }
 
-enum WidgetVariant<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> {
-    Complex(ComplexWidget<'a, T, FocusKey, Event, Msg>),
-    Interactive(InteractiveWidget<'a, T, FocusKey, Event, Msg>),
+enum WidgetVariant<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+> {
+    Complex(ComplexWidget<'a, T, FocusKey, Event, Msg, AnyComponent>),
+    Interactive(InteractiveWidget<'a, T, FocusKey, Event, Msg, AnyComponent>),
     // Layered(LayeredWidget<'a, T, FocusKey, Event, Msg>),
 }
 
-impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
-    WidgetVariant<'a, T, FocusKey, Event, Msg>
+impl<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+> WidgetVariant<'a, T, FocusKey, Event, Msg, AnyComponent>
 {
     /// Returns the nested complex widget inside a widget variant
-    fn complex(&mut self) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg> {
+    fn complex(&mut self) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg, AnyComponent> {
         match self {
             WidgetVariant::Complex(complex) => complex,
             WidgetVariant::Interactive(interactive) => interactive.contents.complex(),
@@ -137,27 +185,17 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
         })
     }
 
-    fn component<const N: usize>(
+    fn component<const N: usize, C: Component<'a, T, Event, Msg, FocusKey> + 'a>(
         bump: &'a Bump,
-        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
+        component: C,
         sizing: Sizing,
-        children: [Widget<'a, T, FocusKey, Event, Msg>; N],
-    ) -> Self {
+        children: [Widget<'a, T, FocusKey, Event, Msg, AnyComponent>; N],
+    ) -> Self
+    where
+        bumpalo::boxed::Box<'a, C>: Into<AnyComponent>,
+    {
         WidgetVariant::Complex(ComplexWidget {
             inner: ComplexWidgetVariant::component(bump, component, children),
-            sizing,
-            size: Size::zero(),
-        })
-    }
-
-    fn component_ref(
-        bump: &'a Bump,
-        component: impl Component<'a, T, Event, Msg, FocusKey> + 'a,
-        sizing: Sizing,
-        children: &'a mut [Widget<'a, T, FocusKey, Event, Msg>],
-    ) -> Self {
-        WidgetVariant::Complex(ComplexWidget {
-            inner: ComplexWidgetVariant::component_ref(bump, component, children),
             sizing,
             size: Size::zero(),
         })
@@ -181,7 +219,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
 
     fn interactive_ref(
         key: FocusKey,
-        contents: &'a mut Widget<'a, T, FocusKey, Event, Msg>,
+        contents: &'a mut Widget<'a, T, FocusKey, Event, Msg, AnyComponent>,
     ) -> Self {
         WidgetVariant::Interactive(InteractiveWidget {
             key,
@@ -193,18 +231,29 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
     }
 }
 
-pub struct Widget<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>(
-    WidgetVariant<'a, T, FocusKey, Event, Msg>,
-);
+pub struct Widget<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+>(WidgetVariant<'a, T, FocusKey, Event, Msg, AnyComponent>);
 
-impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
-    Widget<'a, T, FocusKey, Event, Msg>
+impl<
+    'a,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey>,
+> Widget<'a, T, FocusKey, Event, Msg, AnyComponent>
 {
     fn has_changed(&self, focus_key: FocusKey, previous_focus_key: Option<FocusKey>) -> bool {
         self.0.has_changed(focus_key, previous_focus_key)
     }
 
-    fn complex(&mut self) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg> {
+    fn complex(&mut self) -> &mut ComplexWidget<'a, T, FocusKey, Event, Msg, AnyComponent> {
         self.0.complex()
     }
 }
@@ -237,12 +286,20 @@ impl<GlobalFocusKey: interactive::Key, Event, GlobalMsg> Factory<GlobalFocusKey,
         self.handler_registry.dispatch(&self.focus_key, event)
     }
 
-    pub fn interactive<'b, T: DrawTarget, FocusKey: Into<GlobalFocusKey>, Msg: Into<GlobalMsg>>(
-        &'b mut self,
+    pub fn interactive<
+        'a,
+        T: DrawTarget,
+        FocusKey: Into<GlobalFocusKey>,
+        Msg: Into<GlobalMsg>,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey>,
+    >(
+        &'a mut self,
         key: FocusKey,
         event_handler: impl Fn(Event) -> Msg + 'static,
-        view: impl FnOnce(Option<FocusState>) -> Widget<'b, T, GlobalFocusKey, Event, GlobalMsg>,
-    ) -> Widget<'b, T, GlobalFocusKey, Event, GlobalMsg> {
+        view: impl FnOnce(
+            Option<FocusState>,
+        ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent>,
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent> {
         let global_key: GlobalFocusKey = key.into();
 
         let state = if self.focus_key == global_key {
@@ -263,40 +320,47 @@ impl<GlobalFocusKey: interactive::Key, Event, GlobalMsg> Factory<GlobalFocusKey,
         ))
     }
 
-    pub fn component<'a, const N: usize, T: DrawTarget>(
+    pub fn component<
+        'a,
+        const N: usize,
+        T: DrawTarget,
+        C: Component<'a, T, Event, GlobalMsg, GlobalFocusKey> + 'a,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey>,
+    >(
         &'a self,
         sizing: Sizing,
-        component: impl Component<'a, T, Event, GlobalMsg, GlobalFocusKey> + 'a,
-        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>; N],
-    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        component: C,
+        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent>; N],
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent>
+    where
+        bumpalo::boxed::Box<'a, C>: Into<AnyComponent>,
+    {
         Widget(WidgetVariant::component(
             &self.bump, component, sizing, children,
         ))
     }
 
-    pub fn component_ref<'a, T: DrawTarget>(
-        &'a self,
-        sizing: Sizing,
-        component: impl Component<'a, T, Event, GlobalMsg, GlobalFocusKey> + 'a,
-        children: &'a mut [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>],
-    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
-        Widget(WidgetVariant::component_ref(
-            &self.bump, component, sizing, children,
-        ))
-    }
-
-    pub fn primitive<'a, T: DrawTarget>(
+    pub fn primitive<
+        'a,
+        T: DrawTarget,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey>,
+    >(
         &'a self,
         sizing: Sizing,
         primitive: impl Primitive<T> + 'a,
-    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent> {
         Widget(WidgetVariant::primitive(&self.bump, primitive, sizing))
     }
 
-    pub fn view<'a, const N: usize, T: DrawTarget>(
+    pub fn view<
+        'a,
+        const N: usize,
+        T: DrawTarget,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey>,
+    >(
         &'a self,
         direction: Direction,
-        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>; N],
+        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent>; N],
     ) -> View<'a, T, GlobalFocusKey, Event, GlobalMsg> {
         View {
             internals: ViewInternals {
@@ -307,29 +371,26 @@ impl<GlobalFocusKey: interactive::Key, Event, GlobalMsg> Factory<GlobalFocusKey,
         }
     }
 
-    pub fn view_ref<'a, T: DrawTarget>(
-        &self,
-        direction: Direction,
-        children: &'a mut [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>],
-    ) -> View<'a, T, GlobalFocusKey, Event, GlobalMsg> {
-        View {
-            internals: ViewInternals {
-                widgets: children,
-                direction,
-                phantom: PhantomData,
-            },
-        }
-    }
-
-    pub fn spacer<'a, T: DrawTarget>(&'a self) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+    pub fn spacer<
+        'a,
+        T: DrawTarget,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey>,
+    >(
+        &'a self,
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent> {
         self.primitive(Sizing::Fill, Spacer::zero())
     }
 
-    pub fn group<'a, const N: usize, T: DrawTarget>(
+    pub fn group<
+        'a,
+        const N: usize,
+        T: DrawTarget,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey>,
+    >(
         &'a self,
         direction: Direction,
-        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg>; N],
-    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg> {
+        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent>; N],
+    ) -> Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent> {
         self.component(
             Sizing::Fill,
             Group::zero(SignalRef::owned(direction)),
@@ -510,7 +571,7 @@ impl<'a, T: DrawTarget, FocusKey: interactive::Key, Event, Msg> View<'a, T, Focu
         )
     }
 
-    pub(crate) fn render(
+    pub(crate) unsafe fn render(
         self,
         factory: &'a Factory<FocusKey, Event, Msg>,
         origin: Position,

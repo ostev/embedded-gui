@@ -3,10 +3,13 @@ use embedded_graphics::prelude::{Dimensions, DrawTarget};
 use crate::{
     interactive::{self, FocusState},
     position::Position,
+    signal::Reactive,
     view::{self, Factory, View},
 };
 
-pub trait App: State {
+pub use embedded_gui_macros::State;
+
+pub trait App: State + Reactive {
     type Target: DrawTarget;
     type Msg;
     type Event;
@@ -69,19 +72,25 @@ pub fn render<A: App>(
     internal_state: &mut InternalState<A::FocusKey, A::Event, A::Msg>,
     display: &mut A::Target,
 ) -> Result<(), <A::Target as DrawTarget>::Error> {
-    let view = app.view(&internal_state.factory);
+    if app.has_changed() {
+        let view = app.view(&internal_state.factory);
 
-    let output = view.render(
-        &internal_state.factory,
-        Position::zero(),
-        display.bounding_box().size.into(),
-        internal_state.current_focus_key,
-        internal_state.previous_focus_key,
-        display,
-        A::background_color(),
-    );
+        let output = view.render(
+            &internal_state.factory,
+            Position::zero(),
+            display.bounding_box().size.into(),
+            internal_state.current_focus_key,
+            internal_state.previous_focus_key,
+            display,
+            A::background_color(),
+        );
 
-    internal_state.factory.bump.reset();
+        internal_state.factory.bump.reset();
 
-    output
+        app.mark_resolved();
+
+        output
+    } else {
+        Ok(())
+    }
 }

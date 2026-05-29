@@ -1,3 +1,5 @@
+use core::any::Any;
+
 use embedded_graphics::draw_target::DrawTarget;
 
 use crate::{
@@ -29,14 +31,21 @@ impl<'model> IntrinsicSize for Group<'model> {
     }
 }
 
-impl<'a, 'model, T: DrawTarget, FocusKey: interactive::Key, Event, Msg>
-    Component<'a, T, Event, Msg, FocusKey> for Group<'model>
+impl<
+    'a,
+    'model,
+    T: DrawTarget,
+    FocusKey: interactive::Key,
+    Event,
+    Msg,
+    AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent>,
+> Component<'a, T, Event, Msg, FocusKey, AnyComponent> for Group<'model>
 {
-    fn view(
-        &self,
+    fn view<const N: usize>(
+        self,
         v: &'a crate::view::Factory<FocusKey, Event, Msg>,
-        children: &'a mut [crate::view::Widget<'a, T, FocusKey, Event, Msg>],
+        children: [crate::view::Widget<'a, T, FocusKey, Event, Msg, AnyComponent>; N],
     ) -> crate::view::View<'a, T, FocusKey, Event, Msg> {
-        v.view_ref(*self.direction, children)
+        v.view(*self.direction, children)
     }
 }

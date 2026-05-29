@@ -5,17 +5,16 @@ use embedded_graphics::{
 };
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 use embedded_gui::{
-    Reactive,
-    app::{self, App, InternalState},
+    app::{self, App, InternalState, State},
     component::button::Button,
     interactive::FocusState,
     layout::{Direction, Sizing},
     primitive::text::Text,
-    signal::{Signal, SignalRef},
+    signal::{Reactive, Signal, SignalRef},
     size::Size,
 };
 
-#[derive(Reactive)]
+#[derive(Reactive, State)]
 struct MyApp {
     text: Signal<String>,
     font_style: Signal<MonoTextStyle<'static, Rgb888>>,

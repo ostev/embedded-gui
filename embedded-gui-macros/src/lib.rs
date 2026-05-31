@@ -88,7 +88,7 @@ fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
                         let field_names = fields.named.iter().map(|field| field.ident.as_ref().unwrap());
 
                         quote! {
-                            #qualified_name { #(#field_names),* } => #interior
+                            #qualified_name { #(#field_names),* } => #interior,
                         }
                     }
                     Fields::Unnamed(ref fields) => {
@@ -108,7 +108,7 @@ fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
                     },
                     Fields::Unit => {
                         quote_spanned! { variant.span() =>
-                            #qualified_name => false
+                            #qualified_name => false,
                         }
                     },
                 }

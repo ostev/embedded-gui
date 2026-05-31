@@ -173,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "embedded-gui-macros"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "darling",
  "proc-macro2",

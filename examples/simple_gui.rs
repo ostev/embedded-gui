@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use embedded_graphics::{
     draw_target::DrawTarget,
     mono_font::{MonoTextStyle, iso_8859_13::FONT_10X20},
@@ -9,7 +11,7 @@ use embedded_gui::{
     component::{any_component, button::Button},
     interactive::FocusState,
     layout::{Direction, IntrinsicSize, Sizing},
-    primitive::text::Text,
+    primitive::{any_primitive, spacer::Spacer, text::Text},
     signal::{Reactive, Signal, SignalRef},
     size::Size,
 };
@@ -34,7 +36,14 @@ type Display = SimulatorDisplay<Rgb888>;
 #[derive(Reactive)]
 #[any_component(target = Display, event = Event, msg = Msg, focus_key = FocusKey)]
 enum AnyComponent<'a> {
-    Button(Button<'a, Rgb888>),
+    Button(Button<'a, Rgb888, String>),
+}
+
+#[derive(Reactive)]
+#[any_primitive(target = Display)]
+enum AnyPrimitive<'a> {
+    Text(Text<'a, Rgb888, String>),
+    Spacer(Spacer<'a>),
 }
 
 impl App for MyApp {
@@ -43,6 +52,7 @@ impl App for MyApp {
     type Event = Event;
     type FocusKey = FocusKey;
     type AnyComponent<'a> = AnyComponent<'a>;
+    type AnyPrimitive<'a> = AnyPrimitive<'a>;
 
     fn initial_focus_key() -> Self::FocusKey {
         FocusKey::None
@@ -73,6 +83,7 @@ impl App for MyApp {
         Self::Msg,
         Self::FocusKey,
         Self::AnyComponent<'a>,
+        Self::AnyPrimitive<'a>,
     > {
         v.view(
             Direction::Horizontal,
@@ -96,7 +107,7 @@ impl App for MyApp {
                 v.component(
                     Sizing::Fill,
                     Button {
-                        text: SignalRef::owned("Say hi!"),
+                        text: SignalRef::owned("Say hi!".into()),
                         font_style: self.font_style.to_ref(),
                         size: SignalRef::owned(Size::new(128, 32)),
                     },

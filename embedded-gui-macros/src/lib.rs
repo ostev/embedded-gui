@@ -2,7 +2,8 @@ use proc_macro2::{Span, TokenStream};
 use quote::{TokenStreamExt, format_ident, quote, quote_spanned};
 use syn::{
     Attribute, DeriveInput, Error, Expr, Field, Fields, Ident, ImplGenerics, Lifetime,
-    LifetimeParam, Path, Token, Type, TypeParam, TypePath, Visibility, braced, parenthesized,
+    LifetimeParam, Path, Token, Type, TypeGenerics, TypeParam, TypePath, Visibility, braced,
+    parenthesized,
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
@@ -221,30 +222,26 @@ impl Parse for AttributeKeyValuePairs {
 }
 
 struct AnyComponentArgs {
-    // #[darling(default = || Ident::new("a", Span::mixed_site()))]
-    // lifetime_name: LifetimeParam,
     target: Type,
     event: Type,
     msg: Type,
     focus_key: Type,
+    any_primitive: Type,
 }
 
-impl AnyComponentArgs {
-    pub fn new(pairs: AttributeKeyValuePairs) -> AnyComponentArgs {
-        // let mut lifetime_name = LifetimeParam::new(Lifetime::new(symbol, span));
-        let mut args = AnyComponentArgs {
+struct AnyPrimitiveArgs {
+    target: Type,
+}
+
+impl AnyPrimitiveArgs {
+    pub fn new(pairs: AttributeKeyValuePairs) -> AnyPrimitiveArgs {
+        let mut args = AnyPrimitiveArgs {
             target: parse_quote!(Display),
-            event: parse_quote!(Event),
-            msg: parse_quote!(Event),
-            focus_key: parse_quote!(FocusKey),
         };
 
         for pair in pairs.pairs {
             match pair.key.to_string().as_str() {
                 "target" => args.target = pair.value,
-                "event" => args.event = pair.value,
-                "msg" => args.msg = pair.value,
-                "focus_key" => args.focus_key = pair.value,
                 _ => {}
             }
         }
@@ -253,18 +250,130 @@ impl AnyComponentArgs {
     }
 }
 
+impl AnyComponentArgs {
+    pub fn new(pairs: AttributeKeyValuePairs) -> AnyComponentArgs {
+        let mut args = AnyComponentArgs {
+            target: parse_quote!(Display),
+            event: parse_quote!(Event),
+            msg: parse_quote!(Event),
+            focus_key: parse_quote!(FocusKey),
+            any_primitive: parse_quote!(AnyPrimitive<'a>),
+        };
+
+        for pair in pairs.pairs {
+            match pair.key.to_string().as_str() {
+                "target" => args.target = pair.value,
+                "event" => args.event = pair.value,
+                "msg" => args.msg = pair.value,
+                "focus_key" => args.focus_key = pair.value,
+                "any_primitive" => args.any_primitive = pair.value,
+                _ => {}
+            }
+        }
+
+        args
+    }
+}
+
+struct EnumVariantInfo {
+    qualified_name: TokenStream,
+    unqualified_name: Ident,
+    field_type: Type,
+}
+
+fn collect_enum_variants(
+    type_name: &Ident,
+    data: &syn::Data,
+) -> Result<Vec<EnumVariantInfo>, TokenStream> {
+    let data = match data {
+        syn::Data::Enum(data) => data,
+        _ => {
+            return Err(
+                Error::new(Span::mixed_site(), "Attribute must be used on an enum")
+                    .to_compile_error()
+                    .into(),
+            );
+        }
+    };
+
+    let mut variants = Vec::new();
+
+    for variant in &data.variants {
+        let variant_name = &variant.ident;
+        let qualified_name = quote_spanned! { variant.span() => #type_name::#variant_name};
+
+        let first_field = match variant.fields.iter().next() {
+            Some(field) => field,
+            None => {
+                return Err(
+                    Error::new(variant.span(), "All variants must contain one field")
+                        .to_compile_error()
+                        .into(),
+                );
+            }
+        };
+
+        variants.push(EnumVariantInfo {
+            qualified_name,
+            unqualified_name: variant_name.clone(),
+            field_type: first_field.ty.clone(),
+        });
+    }
+
+    Ok(variants)
+}
+
+fn build_match_interior(branches: Vec<TokenStream>) -> TokenStream {
+    quote! {
+        match self {
+            #(#branches),*
+        }
+    }
+}
+
+fn build_enum_variants(variants: &[EnumVariantInfo]) -> Vec<TokenStream> {
+    variants
+        .iter()
+        .map(|variant| {
+            let unqualified_name = &variant.unqualified_name;
+            let field_type = &variant.field_type;
+            quote! {
+                #unqualified_name(::bumpalo::boxed::Box<'a, #field_type>)
+            }
+        })
+        .collect()
+}
+
+fn build_from_impls(
+    impl_generics: &ImplGenerics,
+    ty_generics: &TypeGenerics,
+    where_clause: Option<&syn::WhereClause>,
+    type_name: &Ident,
+    lifetime_generic: &LifetimeParam,
+    variants: &[EnumVariantInfo],
+    param_name: &Ident,
+) -> Vec<TokenStream> {
+    variants
+        .iter()
+        .map(|variant| {
+            let qualified_name = &variant.qualified_name;
+            let field_type = &variant.field_type;
+            quote! {
+                impl #impl_generics From<::bumpalo::boxed::Box<#lifetime_generic, #field_type>> for #type_name #ty_generics #where_clause {
+                    fn from(#param_name: ::bumpalo::boxed::Box<#lifetime_generic, #field_type>) -> Self {
+                        #qualified_name(#param_name)
+                    }
+                }
+            }
+        })
+        .collect()
+}
+
 #[proc_macro_attribute]
 pub fn any_component(
     attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    // let args: AnyComponentArgs = match syn::parse(attr) {
-    //     Ok(v) => v,
-    //     Err(e) => {
-    //         return e.to_compile_error().into();
-    //     }
-    // };
-
     let input = parse_macro_input!(input as DeriveInput);
 
     let key_value_pairs = parse_macro_input!(attr as AttributeKeyValuePairs);
@@ -273,96 +382,55 @@ pub fn any_component(
     let type_name = input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    // let lifetime_generic = LifetimeParam::new(Lifetime::new(
-    //     &args.lifetime_name.to_string(),
-    //     args.lifetime_name.span(),
-    // ));
-
     let lifetime_generic: LifetimeParam = parse_quote!('a);
 
-    let mut field_types = Vec::new();
-
-    let (view_interior, size_interior) = match input.data {
-        syn::Data::Enum(data) => {
-            let (view_branches, size_branches): (Vec<TokenStream>, Vec<TokenStream>) = data
-                .variants
-                .iter()
-                .map(|variant| {
-                    let variant_name = &variant.ident;
-                    let qualified_name =
-                        quote_spanned! { variant.span() => #type_name::#variant_name};
-
-                    let first_field = match variant.fields.iter().next() {
-                        Some(field) => field,
-                        None => {
-                            let error: TokenStream =
-                                Error::new(variant.span(), "All variants must contain one field")
-                                    .to_compile_error()
-                                    .into();
-
-                            return (error.clone(), error);
-                        }
-                    };
-                    field_types.push((
-                        qualified_name.clone(),
-                        variant_name.clone(),
-                        first_field.ty.clone(),
-                    ));
-
-                    (
-                        quote! {
-                            #qualified_name(reference) => reference.view(v, children)
-                        },
-                        quote! {
-                            #qualified_name(reference) => reference.intrinsic_size()
-                        },
-                    )
-                })
-                .unzip();
-
-            (
-                quote! {
-                    match self {
-                        #(#view_branches),*
-                    }
-                },
-                quote! {
-                    match self {
-                        #(#size_branches),*
-                    }
-                },
-            )
-        }
-        _ => unimplemented!(),
+    let variants = match collect_enum_variants(&type_name, &input.data) {
+        Ok(variants) => variants,
+        Err(error) => return proc_macro::TokenStream::from(error),
     };
 
-    // let mut from_generics = input.generics.clone();
-    // from_generics
-    //     .params
-    //     .push(parse_quote!(FromAnyComponentType));
-
-    let from_impls = field_types.iter().map(|(qualified_name, unqualified_name, field_type)| {
+    let view_branches = variants.iter().map(|variant| {
+        let qualified_name = &variant.qualified_name;
         quote! {
-            impl #impl_generics From<::bumpalo::boxed::Box<#lifetime_generic, #field_type>> for #type_name #ty_generics #where_clause {
-                fn from(component: ::bumpalo::boxed::Box<#lifetime_generic, #field_type>) -> Self {
-                    #qualified_name(component)
-                }
-            }
+            #qualified_name(reference) => reference.view(v, children)
         }
     });
 
-    let enum_variants = field_types
-        .iter()
-        .map(|(qualified_name, unqualified_name, field_type)| {
-            quote! {
-                #unqualified_name(::bumpalo::boxed::Box<'a, #field_type>)
-            }
-        });
+    let size_branches = variants.iter().map(|variant| {
+        let qualified_name = &variant.qualified_name;
+        quote! {
+            #qualified_name(reference) => reference.intrinsic_size()
+        }
+    });
+
+    let view_interior = build_match_interior(view_branches.collect());
+    let size_interior = build_match_interior(size_branches.collect());
+
+    let from_impls = build_from_impls(
+        &impl_generics,
+        &ty_generics,
+        where_clause,
+        &type_name,
+        &lifetime_generic,
+        &variants,
+        &format_ident!("component"),
+    );
+
+    let enum_variants = build_enum_variants(&variants);
 
     let target = &args.target;
     let event = &args.event;
     let msg = &args.msg;
     let focus_key = &args.focus_key;
+    let any_primitive = &args.any_primitive;
+
+    // let mut where_clause_with_any = input
+    //     .generics
+    //     .where_clause
+    //     .clone()
+    //     .unwrap_or_else(|| parse_quote!(where));
+    // where_clause_with_any.predicates;
+    // .push(parse_quote!(AnyPrimitive: ::embedded_gui::primitive::Primitive<#target>));
 
     let expanded = quote! {
         // #input
@@ -370,12 +438,12 @@ pub fn any_component(
             #(#enum_variants),*
         }
 
-        impl #impl_generics ::embedded_gui::component::Component<#lifetime_generic, #target, #event, #msg, #focus_key, Self> for #type_name #ty_generics #where_clause {
+        impl #impl_generics ::embedded_gui::component::Component<#lifetime_generic, #target, #event, #msg, #focus_key, Self, #any_primitive> for #type_name #ty_generics #where_clause {
             fn view(
                 &self,
                 v: &'a ::embedded_gui::view::Factory<#event, #msg, #focus_key>,
-                children: ::embedded_gui::view::Children<#lifetime_generic, #target, #event, #msg, #focus_key, Self>,
-            ) -> ::embedded_gui::view::View<#lifetime_generic, #target, #event, #msg, #focus_key, Self> {
+                children: ::embedded_gui::view::Children<#lifetime_generic, #target, #event, #msg, #focus_key, Self, #any_primitive>,
+            ) -> ::embedded_gui::view::View<#lifetime_generic, #target, #event, #msg, #focus_key, Self, #any_primitive> {
                 #view_interior
             }
         }
@@ -383,7 +451,7 @@ pub fn any_component(
 
         impl #impl_generics ::embedded_gui::layout::IntrinsicSize for #type_name #ty_generics #where_clause {
             #[inline]
-            fn intrinsic_size(&self) -> embedded_gui::size::Size {
+            fn intrinsic_size(&self) -> ::embedded_gui::size::Size {
                 #size_interior
             }
         }
@@ -391,6 +459,84 @@ pub fn any_component(
 
         #(#from_impls)*
 
+    };
+
+    proc_macro::TokenStream::from(expanded)
+}
+
+#[proc_macro_attribute]
+pub fn any_primitive(
+    attr: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let key_value_pairs = parse_macro_input!(attr as AttributeKeyValuePairs);
+    let args = AnyPrimitiveArgs::new(key_value_pairs);
+
+    let type_name = input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let lifetime_generic: LifetimeParam = parse_quote!('a);
+
+    let variants = match collect_enum_variants(&type_name, &input.data) {
+        Ok(variants) => variants,
+        Err(error) => return proc_macro::TokenStream::from(error),
+    };
+
+    let draw_branches = variants.iter().map(|variant| {
+        let qualified_name = &variant.qualified_name;
+        quote! {
+            #qualified_name(reference) => reference.draw(target)
+        }
+    });
+
+    let size_branches = variants.iter().map(|variant| {
+        let qualified_name = &variant.qualified_name;
+        quote! {
+            #qualified_name(reference) => reference.intrinsic_size()
+        }
+    });
+
+    let draw_interior = build_match_interior(draw_branches.collect());
+    let size_interior = build_match_interior(size_branches.collect());
+
+    let from_impls = build_from_impls(
+        &impl_generics,
+        &ty_generics,
+        where_clause,
+        &type_name,
+        &lifetime_generic,
+        &variants,
+        &format_ident!("primitive"),
+    );
+
+    let enum_variants = build_enum_variants(&variants);
+
+    let target = &args.target;
+
+    let expanded = quote! {
+        enum #type_name #ty_generics #where_clause {
+            #(#enum_variants),*
+        }
+
+        impl #impl_generics ::embedded_gui::primitive::Primitive<#target> for #type_name #ty_generics #where_clause {
+            fn draw(
+                &self,
+                target: &mut ::embedded_gui::draw::LocalTarget<#target>,
+            ) -> Result<(), <#target as ::embedded_graphics::draw_target::DrawTarget>::Error> {
+                #draw_interior
+            }
+        }
+
+        impl #impl_generics ::embedded_gui::layout::IntrinsicSize for #type_name #ty_generics #where_clause {
+            #[inline]
+            fn intrinsic_size(&self) -> ::embedded_gui::size::Size {
+                #size_interior
+            }
+        }
+
+        #(#from_impls)*
     };
 
     proc_macro::TokenStream::from(expanded)

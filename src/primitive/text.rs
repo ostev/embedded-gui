@@ -1,3 +1,4 @@
+use alloc::{borrow::Cow, string::String};
 use embedded_graphics::{
     Drawable,
     draw_target::DrawTarget,
@@ -28,7 +29,7 @@ impl<'model, 'a, Color: PixelColor, S: AsRef<str>> IntrinsicSize for Text<'model
     }
 }
 
-impl<'model, 'a, Color: PixelColor, S: AsRef<str>, T: DrawTarget<Color = Color>> Primitive<T>
+impl<'model, 'a, Color: PixelColor, T: DrawTarget<Color = Color>, S: AsRef<str>> Primitive<T>
     for Text<'model, Color, S>
 {
     fn draw(&self, target: &mut crate::draw::LocalTarget<T>) -> Result<(), T::Error> {

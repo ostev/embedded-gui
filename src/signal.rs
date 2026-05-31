@@ -1,6 +1,6 @@
 use core::{fmt::Debug, ops::Deref};
 
-use alloc::borrow::Cow;
+use alloc::{borrow::Cow, rc::Rc};
 pub use embedded_gui_macros::Reactive;
 
 use crate::app::State;
@@ -114,31 +114,31 @@ impl<T> Reactive for Signal<T> {
 //     }
 // }
 
-#[derive(Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum SignalRef<'model, T> {
-    Owned(Signal<T>),
+    Owned(Rc<Signal<T>>),
     Borrowed(&'model Signal<T>),
 }
 
 impl<'model, T> SignalRef<'model, T> {
     #[inline(always)]
     pub fn owned(value: T) -> Self {
-        Self::Owned(Signal {
+        Self::Owned(Rc::new(Signal {
             value,
             has_changed: false,
-        })
+        }))
     }
 
     pub fn map<U>(&self, f: impl Fn(&T) -> U) -> SignalRef<'model, U> {
         match self {
-            SignalRef::Owned(signal) => SignalRef::Owned(Signal {
+            SignalRef::Owned(signal) => SignalRef::Owned(Rc::new(Signal {
                 value: f(&signal.value),
                 has_changed: signal.has_changed,
-            }),
-            SignalRef::Borrowed(signal) => SignalRef::Owned(Signal {
+            })),
+            SignalRef::Borrowed(signal) => SignalRef::Owned(Rc::new(Signal {
                 value: f(&signal.value),
                 has_changed: signal.has_changed,
-            }),
+            })),
         }
     }
 }
@@ -156,6 +156,7 @@ impl<'model, T> Reactive for SignalRef<'model, T> {
 impl<'model, T> Deref for SignalRef<'model, T> {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         match self {
             Self::Owned(signal) => &signal.value,
@@ -164,7 +165,7 @@ impl<'model, T> Deref for SignalRef<'model, T> {
     }
 }
 
-impl<'model, T: Clone> Clone for SignalRef<'model, T> {
+impl<'model, T> Clone for SignalRef<'model, T> {
     #[inline]
     fn clone(&self) -> Self {
         match self {

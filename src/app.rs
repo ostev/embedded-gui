@@ -4,6 +4,7 @@ use crate::{
     component::Component,
     interactive::{self, FocusState},
     position::Position,
+    primitive::Primitive,
     signal::Reactive,
     view::{self, Factory, View},
 };
@@ -15,7 +16,18 @@ pub trait App: State + Reactive {
     type Msg;
     type Event;
     type FocusKey: interactive::Key;
-    type AnyComponent<'a>: Component<'a, Self::Target, Self::Event, Self::Msg, Self::FocusKey, Self::AnyComponent<'a>>
+    type AnyComponent<'a>: Component<
+            'a,
+            Self::Target,
+            Self::Event,
+            Self::Msg,
+            Self::FocusKey,
+            Self::AnyComponent<'a>,
+            Self::AnyPrimitive<'a>,
+        >
+    where
+        Self: 'a;
+    type AnyPrimitive<'a>: Primitive<Self::Target>
     where
         Self: 'a;
 
@@ -28,7 +40,15 @@ pub trait App: State + Reactive {
     fn view<'a>(
         &'a self,
         v: &'a view::Factory<Self::Event, Self::Msg, Self::FocusKey>,
-    ) -> View<'a, Self::Target, Self::Event, Self::Msg, Self::FocusKey, Self::AnyComponent<'a>>;
+    ) -> View<
+        'a,
+        Self::Target,
+        Self::Event,
+        Self::Msg,
+        Self::FocusKey,
+        Self::AnyComponent<'a>,
+        Self::AnyPrimitive<'a>,
+    >;
 }
 
 pub trait State {

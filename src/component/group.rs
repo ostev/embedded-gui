@@ -1,5 +1,4 @@
-use core::any::Any;
-
+use bumpalo::boxed::Box;
 use embedded_graphics::draw_target::DrawTarget;
 
 use crate::{
@@ -8,6 +7,7 @@ use crate::{
     layout::{Direction, IntrinsicSize},
     signal::{Reactive, SignalRef},
     size::Size,
+    view::{self, Children},
 };
 
 #[derive(Reactive)]
@@ -35,17 +35,17 @@ impl<
     'a,
     'model,
     T: DrawTarget,
-    FocusKey: interactive::Key,
     Event,
     Msg,
+    FocusKey: interactive::Key,
     AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent>,
 > Component<'a, T, Event, Msg, FocusKey, AnyComponent> for Group<'model>
 {
-    fn view<const N: usize>(
-        self,
-        v: &'a crate::view::Factory<FocusKey, Event, Msg>,
-        children: [crate::view::Widget<'a, T, FocusKey, Event, Msg, AnyComponent>; N],
-    ) -> crate::view::View<'a, T, FocusKey, Event, Msg> {
-        v.view(*self.direction, children)
+    fn view(
+        &self,
+        v: &'a view::Factory<Event, Msg, FocusKey>,
+        children: Children<'a, T, Event, Msg, FocusKey, AnyComponent>,
+    ) -> crate::view::View<'a, T, Event, Msg, FocusKey, AnyComponent> {
+        v.view_ref(*self.direction, children)
     }
 }

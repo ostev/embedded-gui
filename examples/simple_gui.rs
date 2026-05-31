@@ -6,9 +6,9 @@ use embedded_graphics::{
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 use embedded_gui::{
     app::{self, App, InternalState, State},
-    component::button::Button,
+    component::{any_component, button::Button},
     interactive::FocusState,
-    layout::{Direction, Sizing},
+    layout::{Direction, IntrinsicSize, Sizing},
     primitive::text::Text,
     signal::{Reactive, Signal, SignalRef},
     size::Size,
@@ -27,11 +27,22 @@ enum FocusKey {
     None,
 }
 
+enum Event {}
+
+type Display = SimulatorDisplay<Rgb888>;
+
+#[derive(Reactive)]
+#[any_component(target = Display, event = Event, msg = Msg, focus_key = FocusKey)]
+enum AnyComponent<'a> {
+    Button(Button<'a, Rgb888>),
+}
+
 impl App for MyApp {
     type Target = SimulatorDisplay<Rgb888>;
     type Msg = Msg;
-    type Event = ();
+    type Event = Event;
     type FocusKey = FocusKey;
+    type AnyComponent<'a> = AnyComponent<'a>;
 
     fn initial_focus_key() -> Self::FocusKey {
         FocusKey::None
@@ -54,8 +65,15 @@ impl App for MyApp {
 
     fn view<'a>(
         &'a self,
-        v: &'a embedded_gui::view::Factory<Self::FocusKey, Self::Event, Self::Msg>,
-    ) -> embedded_gui::view::View<'a, Self::Target, Self::FocusKey, Self::Event, Self::Msg> {
+        v: &'a embedded_gui::view::Factory<Self::Event, Self::Msg, Self::FocusKey>,
+    ) -> embedded_gui::view::View<
+        'a,
+        Self::Target,
+        Self::Event,
+        Self::Msg,
+        Self::FocusKey,
+        Self::AnyComponent<'a>,
+    > {
         v.view(
             Direction::Horizontal,
             [
@@ -96,7 +114,7 @@ async fn main() {
 
     let output_settings = OutputSettingsBuilder::new().build();
 
-    let app = MyApp::new();
+    let mut app = MyApp::new();
     let mut internal_state = InternalState::new(FocusKey::None);
 
     let mut window = Window::new("Hello World", &output_settings);

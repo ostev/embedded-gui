@@ -1,4 +1,4 @@
-use alloc::rc::Rc;
+use bumpalo::boxed::Box;
 use embedded_graphics::{draw_target::DrawTarget, mono_font::MonoTextStyle, prelude::PixelColor};
 
 use crate::{
@@ -8,11 +8,12 @@ use crate::{
     primitive::text::Text,
     signal::{Reactive, SignalRef},
     size::Size,
+    view::{self, Children},
 };
 
 #[derive(Reactive)]
-pub struct Button<'model, Color: PixelColor, S: AsRef<str>> {
-    pub text: SignalRef<'model, S>,
+pub struct Button<'model, Color: PixelColor> {
+    pub text: SignalRef<'model, &'model str>,
     pub font_style: SignalRef<'model, MonoTextStyle<'static, Color>>,
     pub size: SignalRef<'model, Size>,
 }
@@ -23,7 +24,7 @@ pub struct Button<'model, Color: PixelColor, S: AsRef<str>> {
 //     C { a: SignalRef<'model, u32> },
 // }
 
-impl<'model, Color: PixelColor, S: AsRef<str>> IntrinsicSize for Button<'model, Color, S> {
+impl<'model, Color: PixelColor> IntrinsicSize for Button<'model, Color> {
     fn intrinsic_size(&self) -> crate::size::Size {
         *self.size
     }
@@ -33,33 +34,33 @@ impl<
     'a,
     'model: 'a,
     Color: PixelColor,
-    S: AsRef<str>,
     T: DrawTarget<Color = Color>,
-    FocusKey: interactive::Key,
     Event,
     Msg,
+    FocusKey: interactive::Key,
     AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent>,
-> Component<'a, T, Event, Msg, FocusKey, AnyComponent> for Button<'model, Color, S>
+> Component<'a, T, Event, Msg, FocusKey, AnyComponent> for Button<'model, Color>
 where
-    bumpalo::boxed::Box<'a, Self>: Into<AnyComponent>,
+    Box<'a, Self>: Into<AnyComponent>,
 {
-    fn view<const N: usize>(
-        self,
-        v: &'a crate::view::Factory<FocusKey, Event, Msg>,
-        _children: [crate::view::Widget<'a, T, FocusKey, Event, Msg, AnyComponent>; N],
-    ) -> crate::view::View<'a, T, FocusKey, Event, Msg> {
+    fn view(
+        &self,
+        v: &'a view::Factory<Event, Msg, FocusKey>,
+        _children: Children<'a, T, Event, Msg, FocusKey, AnyComponent>,
+    ) -> crate::view::View<'a, T, Event, Msg, FocusKey, AnyComponent> {
         v.view(
             Direction::Horizontal,
-            [v.centered(
-                Direction::Horizontal,
+            [
+                v.spacer(),
                 v.primitive(
                     Sizing::Intrinsic,
                     Text {
                         content: self.text,
-                        font_style: self.font_style.clone(),
+                        font_style: self.font_style,
                     },
                 ),
-            )],
+                v.spacer(),
+            ],
         )
     }
 }

@@ -1,5 +1,4 @@
-use core::any::Any;
-
+use bumpalo::boxed::Box;
 use embedded_graphics::draw_target::DrawTarget;
 
 pub mod button;
@@ -11,7 +10,7 @@ use crate::{
     interactive,
     layout::IntrinsicSize,
     signal::Reactive,
-    view::{Factory, View, Widget},
+    view::{Children, Factory, View},
 };
 
 pub trait Component<
@@ -23,9 +22,9 @@ pub trait Component<
     AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent>,
 >: Reactive + IntrinsicSize
 {
-    fn view<const N: usize>(
-        self,
-        v: &'a Factory<GlobalFocusKey, Event, GlobalMsg>,
-        children: [Widget<'a, T, GlobalFocusKey, Event, GlobalMsg, AnyComponent>; N],
-    ) -> View<'a, T, GlobalFocusKey, Event, GlobalMsg>;
+    fn view(
+        &self,
+        v: &'a Factory<Event, GlobalMsg, GlobalFocusKey>,
+        children: Children<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent>,
+    ) -> View<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent>;
 }

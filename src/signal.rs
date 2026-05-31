@@ -1,5 +1,6 @@
 use core::{fmt::Debug, ops::Deref};
 
+use alloc::borrow::Cow;
 pub use embedded_gui_macros::Reactive;
 
 use crate::app::State;
@@ -8,12 +9,33 @@ pub trait Reactive {
     fn has_changed(&self) -> bool;
 }
 
-impl<'a, T> Reactive for &'a T
+macro_rules! reactive_impl {
+    ($t:ty) => {
+        impl<'a, T> Reactive for $t
+        where
+            T: Reactive,
+        {
+            fn has_changed(&self) -> bool {
+                T::has_changed(self)
+            }
+        }
+    };
+}
+
+reactive_impl!(&'a T);
+
+reactive_impl!(alloc::boxed::Box<T>);
+reactive_impl!(alloc::rc::Rc<T>);
+reactive_impl!(alloc::sync::Arc<T>);
+
+reactive_impl!(bumpalo::boxed::Box<'a, T>);
+
+impl<'a, T: Clone> Reactive for Cow<'a, T>
 where
     T: Reactive,
 {
     fn has_changed(&self) -> bool {
-        (*self).has_changed()
+        T::has_changed(self)
     }
 }
 

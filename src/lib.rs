@@ -1,7 +1,4 @@
 #![no_std]
-#![feature(arbitrary_self_types)]
-
-use embedded_gui_macros::{Reactive, any_component};
 
 extern crate alloc;
 extern crate self as embedded_gui;

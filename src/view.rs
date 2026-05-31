@@ -400,7 +400,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
         AnyPrimitive: Primitive<T>,
     >(
-        &'a mut self,
+        &'a self,
         key: FocusKey,
         event_handler: impl Fn(Event) -> Msg + 'static,
         view: impl FnOnce(

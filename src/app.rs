@@ -34,7 +34,7 @@ pub trait App: State + Reactive {
     where
         Self: 'a;
 
-    type Effect: effect::Effect<Self::Msg>;
+    type Effect: effect::Effect<Msg = Self::Msg>;
 
     fn new() -> Self;
 
@@ -56,7 +56,7 @@ pub trait App: State + Reactive {
     >;
 }
 
-pub struct Change<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg>> {
+pub struct Change<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> {
     focus_key: Option<FocusKey>,
     focus_state: Option<FocusState>,
     effect: Option<E>,
@@ -64,13 +64,15 @@ pub struct Change<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg>> {
     phantom: PhantomData<Msg>,
 }
 
-impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg>> Default for Change<Msg, FocusKey, E> {
+impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> Default
+    for Change<Msg, FocusKey, E>
+{
     fn default() -> Self {
         Self::none()
     }
 }
 
-impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg>> Change<Msg, FocusKey, E> {
+impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> Change<Msg, FocusKey, E> {
     pub const fn none() -> Self {
         Self {
             focus_key: None,

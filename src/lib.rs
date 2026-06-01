@@ -7,6 +7,7 @@ pub mod app;
 pub mod background;
 pub mod component;
 pub mod draw;
+pub mod effect;
 pub mod event;
 pub mod interactive;
 pub mod layout;

@@ -383,8 +383,11 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         }
     }
 
-    pub(crate) fn set_focus(&mut self, key: GlobalFocusKey, state: FocusState) {
+    pub(crate) fn set_focus_key(&mut self, key: GlobalFocusKey) {
         self.focus_key = key;
+    }
+
+    pub(crate) fn set_focus_state(&mut self, state: FocusState) {
         self.focus_state = state;
     }
 

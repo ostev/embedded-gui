@@ -1,7 +1,12 @@
+use core::marker::PhantomData;
+
+use embassy_executor::{SpawnToken, Spawner};
+use embassy_sync::{blocking_mutex::raw::RawMutex, mutex::Mutex};
 use embedded_graphics::prelude::{Dimensions, DrawTarget};
 
 use crate::{
     component::Component,
+    effect::{self, Effect},
     interactive::{self, FocusState},
     position::Position,
     primitive::Primitive,
@@ -31,12 +36,14 @@ pub trait App: State + Reactive {
     where
         Self: 'a;
 
+    type Effect: effect::Effect<Self::Msg>;
+
     fn new() -> Self;
 
     fn initial_focus_key() -> Self::FocusKey;
 
     fn background_color() -> <Self::Target as DrawTarget>::Color;
-    fn update(&mut self, msg: Self::Msg) -> Option<(Self::FocusKey, FocusState)>;
+    fn update(&mut self, msg: Self::Msg) -> Change<Self::Msg, Self::FocusKey, Self::Effect>;
     fn view<'a>(
         &'a self,
         v: &'a view::Factory<Self::Event, Self::Msg, Self::FocusKey>,
@@ -49,6 +56,46 @@ pub trait App: State + Reactive {
         Self::AnyComponent<'a>,
         Self::AnyPrimitive<'a>,
     >;
+}
+
+pub struct Change<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg>> {
+    focus_key: Option<FocusKey>,
+    focus_state: Option<FocusState>,
+    effect: Option<E>,
+
+    phantom: PhantomData<Msg>,
+}
+
+impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg>> Default for Change<Msg, FocusKey, E> {
+    fn default() -> Self {
+        Self::none()
+    }
+}
+
+impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg>> Change<Msg, FocusKey, E> {
+    pub const fn none() -> Self {
+        Self {
+            focus_key: None,
+            focus_state: None,
+            effect: None,
+            phantom: PhantomData,
+        }
+    }
+
+    pub const fn with_focus_key(mut self, focus_key: FocusKey) -> Self {
+        self.focus_key = Some(focus_key);
+        self
+    }
+
+    pub const fn with_focus_state(mut self, focus_state: FocusState) -> Self {
+        self.focus_state = Some(focus_state);
+        self
+    }
+
+    pub fn with_effect(mut self, effect: E) -> Self {
+        self.effect = Some(effect);
+        self
+    }
 }
 
 pub trait State {
@@ -71,23 +118,42 @@ impl<Event, Msg, FocusKey: interactive::Key> InternalState<Event, Msg, FocusKey>
     }
 }
 
-pub fn dispatch<A: App>(
-    app: &mut A,
-    internal_state: &mut InternalState<A::Event, A::Msg, A::FocusKey>,
+pub async fn dispatch<M: RawMutex, A: App>(
+    app: &Mutex<M, A>,
+    internal_state: &Mutex<M, InternalState<A::Event, A::Msg, A::FocusKey>>,
     events: impl IntoIterator<Item = A::Event>,
 ) {
     for event in events {
-        let updated_focus = internal_state
-            .factory
-            .dispatch(event)
-            .and_then(|msg| app.update(msg));
+        if let Some(msg) = internal_state.lock().await.factory.dispatch(event) {
+            dispatch_msg(app, internal_state, msg).await;
+        }
+    }
+}
 
-        updated_focus.map(|(key, state)| {
-            internal_state.previous_focus_key = Some(internal_state.current_focus_key);
-            internal_state.current_focus_key = key;
+async fn dispatch_msg<M: RawMutex, A: App>(
+    app: &Mutex<M, A>,
+    internal_state: &Mutex<M, InternalState<A::Event, A::Msg, A::FocusKey>>,
+    msg: A::Msg,
+) {
+    let change = app.lock().await.update(msg);
 
-            internal_state.factory.set_focus(key, state);
-        });
+    if let Some(key) = change.focus_key {
+        let mut internal_state = internal_state.lock().await;
+        internal_state.previous_focus_key = Some(internal_state.current_focus_key);
+        internal_state.current_focus_key = key;
+
+        internal_state.factory.set_focus_key(key);
+    }
+
+    if let Some(state) = change.focus_state {
+        let mut internal_state = internal_state.lock().await;
+        internal_state.factory.set_focus_state(state);
+    }
+
+    if let Some(mut effect) = change.effect {
+        let msg = effect.run().await;
+
+        dispatch_msg(app, internal_state, msg).await;
     }
 }
 

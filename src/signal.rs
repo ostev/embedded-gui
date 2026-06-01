@@ -61,9 +61,11 @@ impl<T> Signal<T> {
     }
 
     #[inline]
-    pub fn update(&mut self, updater: impl Fn(&mut T) -> ()) {
-        updater(&mut self.value);
+    pub fn update<U>(&mut self, updater: impl Fn(&mut T) -> U) -> U {
+        let output = updater(&mut self.value);
         self.mark_changed();
+
+        output
     }
 
     #[inline(always)]

@@ -1,3 +1,3 @@
 pub trait Effect<Msg> {
-    fn run(&mut self) -> impl Future<Output = Msg>;
+    fn run(self) -> impl Future<Output = Msg>;
 }

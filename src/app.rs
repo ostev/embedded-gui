@@ -1,6 +1,5 @@
 use core::marker::PhantomData;
 
-use embassy_executor::{SpawnToken, Spawner};
 use embassy_sync::{blocking_mutex::raw::RawMutex, mutex::Mutex};
 use embedded_graphics::prelude::{Dimensions, DrawTarget};
 

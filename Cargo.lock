@@ -181,7 +181,7 @@ dependencies = [
 
 [[package]]
 name = "embedded-gui"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "bumpalo",
  "embassy-sync",

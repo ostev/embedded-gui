@@ -61,7 +61,7 @@ impl<T> Signal<T> {
     }
 
     #[inline]
-    pub fn update<U>(&mut self, updater: impl Fn(&mut T) -> U) -> U {
+    pub fn update<U>(&mut self, updater: impl FnOnce(&mut T) -> U) -> U {
         let output = updater(&mut self.value);
         self.mark_changed();
 

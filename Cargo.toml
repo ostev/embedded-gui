@@ -9,7 +9,6 @@ embedded-gui-macros = { path = "embedded-gui-macros" }
 bumpalo = { version = "3.20", features = ["boxed", "collections"] }
 hashbrown = "0.17"
 embedded-graphics = "0.8"
-embassy-sync = "0.8.0"
 
 [dev-dependencies]
 embedded-graphics-simulator = "0.8.0"

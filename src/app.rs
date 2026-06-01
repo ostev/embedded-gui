@@ -117,27 +117,26 @@ impl<Event, Msg, FocusKey: interactive::Key> InternalState<Event, Msg, FocusKey>
     }
 }
 
-pub async fn dispatch<M: RawMutex, A: App>(
-    app: &Mutex<M, A>,
-    internal_state: &Mutex<M, InternalState<A::Event, A::Msg, A::FocusKey>>,
+pub async fn dispatch<A: App>(
+    app: &mut A,
+    internal_state: &mut InternalState<A::Event, A::Msg, A::FocusKey>,
     events: impl IntoIterator<Item = A::Event>,
 ) {
     for event in events {
-        if let Some(msg) = internal_state.lock().await.factory.dispatch(event) {
+        if let Some(msg) = internal_state.factory.dispatch(event) {
             dispatch_msg(app, internal_state, msg).await;
         }
     }
 }
 
-async fn dispatch_msg<M: RawMutex, A: App>(
-    app: &Mutex<M, A>,
-    internal_state: &Mutex<M, InternalState<A::Event, A::Msg, A::FocusKey>>,
+async fn dispatch_msg<A: App>(
+    app: &mut A,
+    internal_state: &mut InternalState<A::Event, A::Msg, A::FocusKey>,
     msg: A::Msg,
 ) {
-    let change = app.lock().await.update(msg);
+    let change = app.update(msg);
 
     if let Some(key) = change.focus_key {
-        let mut internal_state = internal_state.lock().await;
         internal_state.previous_focus_key = Some(internal_state.current_focus_key);
         internal_state.current_focus_key = key;
 
@@ -145,11 +144,10 @@ async fn dispatch_msg<M: RawMutex, A: App>(
     }
 
     if let Some(state) = change.focus_state {
-        let mut internal_state = internal_state.lock().await;
         internal_state.factory.set_focus_state(state);
     }
 
-    if let Some(mut effect) = change.effect {
+    if let Some(effect) = change.effect {
         let msg = effect.run().await;
 
         dispatch_msg(app, internal_state, msg).await;

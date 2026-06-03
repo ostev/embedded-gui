@@ -1,5 +1,6 @@
 pub trait Effect {
     type Msg;
+    type Context;
 
-    fn run(self) -> impl Future<Output = Self::Msg>;
+    fn run(self, context: &mut Self::Context) -> impl Future<Output = Self::Msg>;
 }

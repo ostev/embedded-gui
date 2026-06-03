@@ -120,18 +120,20 @@ impl<Event, Msg, FocusKey: interactive::Key> InternalState<Event, Msg, FocusKey>
 
 pub async fn dispatch<A: App>(
     app: &mut A,
+    effect_context: &mut <A::Effect as Effect>::Context,
     internal_state: &mut InternalState<A::Event, A::Msg, A::FocusKey>,
     events: impl IntoIterator<Item = A::Event>,
 ) {
     for event in events {
         if let Some(msg) = internal_state.factory.dispatch(event) {
-            dispatch_msg(app, internal_state, msg).await;
+            dispatch_msg(app, effect_context, internal_state, msg).await;
         }
     }
 }
 
 async fn dispatch_msg<A: App>(
     app: &mut A,
+    effect_context: &mut <A::Effect as Effect>::Context,
     internal_state: &mut InternalState<A::Event, A::Msg, A::FocusKey>,
     msg: A::Msg,
 ) {
@@ -152,7 +154,7 @@ async fn dispatch_msg<A: App>(
         }
 
         next_msg = match change.effect {
-            Some(effect) => Some(effect.run().await),
+            Some(effect) => Some(effect.run(effect_context).await),
             None => None,
         };
     }

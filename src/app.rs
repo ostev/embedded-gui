@@ -135,23 +135,26 @@ async fn dispatch_msg<A: App>(
     internal_state: &mut InternalState<A::Event, A::Msg, A::FocusKey>,
     msg: A::Msg,
 ) {
-    let change = app.update(msg);
+    let mut next_msg = Some(msg);
 
-    if let Some(key) = change.focus_key {
-        internal_state.previous_focus_key = Some(internal_state.current_focus_key);
-        internal_state.current_focus_key = key;
+    while let Some(msg) = next_msg.take() {
+        let change = app.update(msg);
 
-        internal_state.factory.set_focus_key(key);
-    }
+        if let Some(key) = change.focus_key {
+            internal_state.previous_focus_key = Some(internal_state.current_focus_key);
+            internal_state.current_focus_key = key;
 
-    if let Some(state) = change.focus_state {
-        internal_state.factory.set_focus_state(state);
-    }
+            internal_state.factory.set_focus_key(key);
+        }
 
-    if let Some(effect) = change.effect {
-        let msg = effect.run().await;
+        if let Some(state) = change.focus_state {
+            internal_state.factory.set_focus_state(state);
+        }
 
-        dispatch_msg(app, internal_state, msg).await;
+        next_msg = match change.effect {
+            Some(effect) => Some(effect.run().await),
+            None => None,
+        };
     }
 }
 

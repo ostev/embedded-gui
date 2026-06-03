@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "embedded-gui"
-version = "0.0.17"
+version = "0.0.18"
 dependencies = [
  "bumpalo",
  "embedded-graphics",

@@ -13,7 +13,7 @@ use crate::{
 };
 
 #[derive(Reactive)]
-pub struct Button<'model, Color: PixelColor, S: AsRef<str>> {
+pub struct Button<'model, Color: PixelColor, S: AsRef<str> + Clone> {
     pub text: SignalRef<'model, S>,
     pub font_style: SignalRef<'model, MonoTextStyle<'static, Color>>,
     pub size: SignalRef<'model, Size>,
@@ -25,8 +25,8 @@ pub struct Button<'model, Color: PixelColor, S: AsRef<str>> {
 //     C { a: SignalRef<'model, u32> },
 // }
 
-impl<'model, Color: PixelColor, S: AsRef<str>> IntrinsicSize for Button<'model, Color, S> {
-    fn intrinsic_size(&self) -> crate::size::Size {
+impl<'model, Color: PixelColor, S: AsRef<str> + Clone> IntrinsicSize for Button<'model, Color, S> {
+    fn intrinsic_size(&self) -> Size {
         *self.size
     }
 }
@@ -40,7 +40,7 @@ impl<
     FocusKey: interactive::Key,
     AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
     AnyPrimitive: Primitive<T>,
-    S: AsRef<str> + 'a,
+    S: AsRef<str> + Clone + 'a,
 > Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive> for Button<'a, Color, S>
 where
     Box<'a, Self>: Into<AnyComponent>,

@@ -118,29 +118,29 @@ impl<T> Reactive for Signal<T> {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum SignalRef<'model, T> {
-    Owned(Rc<Signal<T>>),
+    Owned(Signal<T>),
     Borrowed(&'model Signal<T>),
 }
 
 impl<'model, T> SignalRef<'model, T> {
     #[inline(always)]
     pub fn owned(value: T) -> Self {
-        Self::Owned(Rc::new(Signal {
+        SignalRef::Owned(Signal {
             value,
             has_changed: false,
-        }))
+        })
     }
 
     pub fn map<U>(&self, f: impl Fn(&T) -> U) -> SignalRef<'model, U> {
         match self {
-            SignalRef::Owned(signal) => SignalRef::Owned(Rc::new(Signal {
+            SignalRef::Owned(signal) => SignalRef::Owned(Signal {
                 value: f(&signal.value),
                 has_changed: signal.has_changed,
-            })),
-            SignalRef::Borrowed(signal) => SignalRef::Owned(Rc::new(Signal {
+            }),
+            SignalRef::Borrowed(signal) => SignalRef::Owned(Signal {
                 value: f(&signal.value),
                 has_changed: signal.has_changed,
-            })),
+            }),
         }
     }
 }
@@ -167,7 +167,7 @@ impl<'model, T> Deref for SignalRef<'model, T> {
     }
 }
 
-impl<'model, T> Clone for SignalRef<'model, T> {
+impl<'model, T: Clone> Clone for SignalRef<'model, T> {
     #[inline]
     fn clone(&self) -> Self {
         match self {

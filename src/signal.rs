@@ -193,7 +193,7 @@ impl<'a, T> Clone for SignalRefVariant<'a, T> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct SignalRef<'a, T> {
     variant: SignalRefVariant<'a, T>,
 }
@@ -252,6 +252,14 @@ impl<'a, T> Deref for SignalRef<'a, T> {
         match &self.variant {
             SignalRefVariant::Owned(signal) => &signal.value,
             SignalRefVariant::Borrowed(signal) => &signal.value,
+        }
+    }
+}
+
+impl<'a, T> Clone for SignalRef<'a, T> {
+    fn clone(&self) -> Self {
+        Self {
+            variant: self.variant.clone(),
         }
     }
 }

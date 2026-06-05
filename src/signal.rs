@@ -175,10 +175,22 @@ impl<T: Copy> Deref for Signal<T> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 enum SignalRefVariant<'a, T> {
     Owned(Source<Rc<T, &'a Bump>>),
     Borrowed(Source<&'a T>),
+}
+
+impl<'a, T> Clone for SignalRefVariant<'a, T> {
+    fn clone(&self) -> Self {
+        match self {
+            SignalRefVariant::Owned(source) => SignalRefVariant::Owned(Source {
+                value: source.value.clone(),
+                has_changed: source.has_changed,
+            }),
+            SignalRefVariant::Borrowed(source) => SignalRefVariant::Borrowed(*source),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

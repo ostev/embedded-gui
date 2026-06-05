@@ -6,27 +6,27 @@ use crate::{
     interactive,
     layout::{Direction, IntrinsicSize},
     primitive::Primitive,
-    signal::{Reactive, SignalRef},
+    signal::{Reactive, Signal},
     size::Size,
     view::{self, Children},
 };
 
 #[derive(Reactive)]
-pub struct Group<'model> {
-    direction: SignalRef<'model, Direction>,
-    size: SignalRef<'model, Size>,
+pub struct Group {
+    direction: Signal<Direction>,
+    size: Signal<Size>,
 }
 
-impl<'model> Group<'model> {
-    pub fn zero(direction: SignalRef<'model, Direction>) -> Self {
+impl Group {
+    pub fn zero(direction: Signal<Direction>) -> Self {
         Self {
-            size: SignalRef::owned(Size::zero()),
+            size: Signal::constant(Size::zero()),
             direction,
         }
     }
 }
 
-impl<'model> IntrinsicSize for Group<'model> {
+impl IntrinsicSize for Group {
     fn intrinsic_size(&self) -> crate::size::Size {
         *self.size
     }
@@ -34,14 +34,13 @@ impl<'model> IntrinsicSize for Group<'model> {
 
 impl<
     'a,
-    'model,
     T: DrawTarget,
     Event,
     Msg,
     FocusKey: interactive::Key,
     AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
     AnyPrimitive: Primitive<T>,
-> Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive> for Group<'model>
+> Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive> for Group
 {
     fn view(
         &self,

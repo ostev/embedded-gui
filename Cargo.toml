@@ -6,7 +6,11 @@ edition = "2024"
 [dependencies]
 embedded-gui-macros = { path = "embedded-gui-macros" }
 
-bumpalo = { version = "3.20", features = ["boxed", "collections"] }
+bumpalo = { version = "3.20", features = [
+    "boxed",
+    "collections",
+    "allocator_api",
+] }
 hashbrown = "0.17"
 embedded-graphics = "0.8"
 

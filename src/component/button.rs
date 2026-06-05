@@ -7,7 +7,7 @@ use crate::{
     interactive,
     layout::{Direction, IntrinsicSize, Sizing},
     primitive::{Primitive, spacer::Spacer, text::Text},
-    signal::{Reactive, SignalRef},
+    signal::{Reactive, Signal, SignalRef},
     size::Size,
     view::{self, Children},
 };
@@ -15,8 +15,8 @@ use crate::{
 #[derive(Reactive)]
 pub struct Button<'model, Color: PixelColor, S: AsRef<str> + Clone> {
     pub text: SignalRef<'model, S>,
-    pub font_style: SignalRef<'model, MonoTextStyle<'static, Color>>,
-    pub size: SignalRef<'model, Size>,
+    pub font_style: Signal<MonoTextStyle<'static, Color>>,
+    pub size: Signal<Size>,
 }
 
 // #[derive(Reactive)]
@@ -33,7 +33,7 @@ impl<'model, Color: PixelColor, S: AsRef<str> + Clone> IntrinsicSize for Button<
 
 impl<
     'a,
-    Color: PixelColor,
+    Color: PixelColor + 'a,
     T: DrawTarget<Color = Color>,
     Event,
     Msg,
@@ -44,7 +44,7 @@ impl<
 > Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive> for Button<'a, Color, S>
 where
     Box<'a, Self>: Into<AnyComponent>,
-    Box<'a, Spacer<'a>>: Into<AnyPrimitive>,
+    Box<'a, Spacer>: Into<AnyPrimitive>,
     Box<'a, Text<'a, T::Color, S>>: Into<AnyPrimitive>,
 {
     fn view(

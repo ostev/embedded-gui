@@ -12,7 +12,7 @@ use crate::{
     layout::{Direction, Sizing},
     position::Position,
     primitive::{Primitive, spacer::Spacer},
-    signal::SignalRef,
+    signal::Signal,
     size::Size,
 };
 
@@ -556,7 +556,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
     where
         bumpalo::boxed::Box<'a, Group<'a>>: Into<AnyComponent>,
     {
-        let component: Group<'a> = Group::zero(SignalRef::owned(direction));
+        let component: Group<'a> = Group::zero(Signal::constant(direction));
         self.component(Sizing::Fill, component, children)
     }
 
@@ -573,7 +573,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
     where
         bumpalo::boxed::Box<'a, Group<'a>>: Into<AnyComponent>,
     {
-        let component: Group<'a> = Group::zero(SignalRef::owned(direction));
+        let component: Group<'a> = Group::zero(Signal::constant(direction));
         self.component_ref(Sizing::Fill, component, children)
     }
 

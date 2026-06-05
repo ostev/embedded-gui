@@ -12,14 +12,14 @@ use embedded_gui::{
     interactive::FocusState,
     layout::{Direction, IntrinsicSize, Sizing},
     primitive::{any_primitive, spacer::Spacer, text::Text},
-    signal::{Reactive, Signal, SignalRef},
+    signal::{Reactive, Signal, Source},
     size::Size,
 };
 
 #[derive(Reactive, State)]
 struct MyApp {
-    text: Signal<String>,
-    font_style: Signal<MonoTextStyle<'static, Rgb888>>,
+    text: Source<String>,
+    font_style: Source<MonoTextStyle<'static, Rgb888>>,
 }
 
 enum Msg {}
@@ -64,8 +64,8 @@ impl App for MyApp {
 
     fn new() -> Self {
         Self {
-            text: Signal::new("Hi".to_string()),
-            font_style: Signal::new(MonoTextStyle::new(&FONT_10X20, Rgb888::RED)),
+            text: Source::new("Hi".to_string()),
+            font_style: Source::new(MonoTextStyle::new(&FONT_10X20, Rgb888::RED)),
         }
     }
 
@@ -92,24 +92,24 @@ impl App for MyApp {
                 v.primitive(
                     Sizing::Intrinsic,
                     Text {
-                        content: self.text.to_ref(),
-                        font_style: self.font_style.to_ref(),
+                        content: self.text.signal(),
+                        font_style: self.font_style.signal(),
                     },
                 ),
                 v.spacer(),
                 v.primitive(
                     Sizing::Intrinsic,
                     Text {
-                        content: self.text.to_ref(),
-                        font_style: self.font_style.to_ref(),
+                        content: self.text.signal(),
+                        font_style: self.font_style.signal(),
                     },
                 ),
                 v.component(
                     Sizing::Fill,
                     Button {
-                        text: SignalRef::owned("Say hi!".into()),
-                        font_style: self.font_style.to_ref(),
-                        size: SignalRef::owned(Size::new(128, 32)),
+                        text: Signal::owned("Say hi!".into()),
+                        font_style: self.font_style.signal(),
+                        size: Signal::owned(Size::new(128, 32)),
                     },
                     [],
                 ),

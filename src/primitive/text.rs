@@ -10,14 +10,14 @@ use embedded_graphics::{
 use crate::{
     layout::IntrinsicSize,
     primitive::Primitive,
-    signal::{Reactive, SignalRef},
+    signal::{Reactive, Signal, SignalRef},
     size::Size,
 };
 
 #[derive(Reactive)]
 pub struct Text<'model, Color: PixelColor, S: AsRef<str>> {
     pub content: SignalRef<'model, S>,
-    pub font_style: SignalRef<'model, MonoTextStyle<'static, Color>>,
+    pub font_style: Signal<MonoTextStyle<'static, Color>>,
 }
 
 impl<'model, 'a, Color: PixelColor, S: AsRef<str>> IntrinsicSize for Text<'model, Color, S> {

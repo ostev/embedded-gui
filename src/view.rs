@@ -537,7 +537,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         &'a self,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        bumpalo::boxed::Box<'a, Spacer<'a>>: Into<AnyPrimitive>,
+        bumpalo::boxed::Box<'a, Spacer>: Into<AnyPrimitive>,
     {
         self.primitive(Sizing::Fill, Spacer::zero())
     }
@@ -554,9 +554,9 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         children: [Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>; N],
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        bumpalo::boxed::Box<'a, Group<'a>>: Into<AnyComponent>,
+        bumpalo::boxed::Box<'a, Group>: Into<AnyComponent>,
     {
-        let component: Group<'a> = Group::zero(Signal::constant(direction));
+        let component = Group::zero(Signal::constant(direction));
         self.component(Sizing::Fill, component, children)
     }
 
@@ -571,9 +571,9 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         children: Children<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        bumpalo::boxed::Box<'a, Group<'a>>: Into<AnyComponent>,
+        bumpalo::boxed::Box<'a, Group>: Into<AnyComponent>,
     {
-        let component: Group<'a> = Group::zero(Signal::constant(direction));
+        let component: Group = Group::zero(Signal::constant(direction));
         self.component_ref(Sizing::Fill, component, children)
     }
 
@@ -588,8 +588,8 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         widget: Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        bumpalo::boxed::Box<'a, Group<'a>>: Into<AnyComponent>,
-        bumpalo::boxed::Box<'a, Spacer<'a>>: Into<AnyPrimitive>,
+        bumpalo::boxed::Box<'a, Group>: Into<AnyComponent>,
+        bumpalo::boxed::Box<'a, Spacer>: Into<AnyPrimitive>,
     {
         self.group(direction, [self.spacer(), widget, self.spacer()])
     }
@@ -604,8 +604,8 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         widget: Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        bumpalo::boxed::Box<'a, Group<'a>>: Into<AnyComponent>,
-        bumpalo::boxed::Box<'a, Spacer<'a>>: Into<AnyPrimitive>,
+        bumpalo::boxed::Box<'a, Group>: Into<AnyComponent>,
+        bumpalo::boxed::Box<'a, Spacer>: Into<AnyPrimitive>,
     {
         self.centered(
             Direction::Vertical,

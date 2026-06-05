@@ -195,21 +195,13 @@ impl<'a, T> SignalRef<'a, T> {
         }))
     }
 
-    #[inline]
-    pub fn owned_constant(bump: &'a Bump, value: T) -> Self {
-        Self::new(SignalRefVariant::Owned(Source {
-            value: Rc::new_in(value, bump),
-            has_changed: false,
-        }))
-    }
-
     #[inline(always)]
     fn new(variant: SignalRefVariant<'a, T>) -> Self {
         Self { variant }
     }
 
     #[inline(always)]
-    pub fn owned(value: T, bump: &'a Bump) -> Self {
+    pub fn owned_constant(value: T, bump: &'a Bump) -> Self {
         SignalRef::new(SignalRefVariant::Owned(Source {
             value: Rc::new_in(value, bump),
             has_changed: false,

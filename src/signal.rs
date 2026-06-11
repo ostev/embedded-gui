@@ -51,7 +51,7 @@ impl<T> Source<T> {
     pub fn new(value: T) -> Self {
         Self {
             value,
-            has_changed: true,
+            has_changed: false,
         }
     }
 

@@ -3,6 +3,7 @@ use core::{marker::PhantomData, mem::ManuallyDrop};
 use alloc::boxed::Box;
 use bumpalo::Bump;
 use embedded_graphics::draw_target::DrawTarget;
+// use esp_println::println;
 
 use crate::{
     component::{Component, group::Group},
@@ -724,6 +725,7 @@ where
                 AnyPrimitive,
             >,
         ) -> (u16, Size) {
+            // println!("Size!!!!");
             let size_complex = |complex: &mut ComplexWidget<
                 'a,
                 T,
@@ -806,6 +808,7 @@ where
         previous_focus_key: Option<FocusKey>,
         target: &mut T,
         background_color: T::Color,
+        is_init: bool,
     ) -> Result<(), T::Error> {
         let (mut sized_view, size_per_widget_option) =
             self.compute_size_per_widget(&factory.bump, available_space, focus_key);
@@ -856,13 +859,16 @@ where
         let mut position = Position::zero();
 
         for widget in (sized_view.widgets.0).iter_mut() {
+            // println!("Widget!");
+
             let has_changed = widget.variant.has_changed(focus_key, previous_focus_key);
 
             let new_position = update_position(widget, &adjust_position, size_per_widget, position);
 
             let complex = widget.variant.complex();
 
-            if has_changed {
+            if is_init || has_changed {
+                // println!("Widget has changed!");
                 match &mut complex.inner {
                     ComplexWidgetVariant::Component(component, children) => {
                         let view = {
@@ -892,12 +898,15 @@ where
                                 previous_focus_key,
                                 target,
                                 background_color,
+                                is_init,
                             )?
                         };
                     }
                     ComplexWidgetVariant::Primitive(primitive) => {
+                        // println!("Primitive!");
                         match LocalTarget::try_new(target, origin + position, complex.size) {
                             Some(mut local_target) => {
+                                local_target.clear(background_color)?;
                                 primitive.draw(&mut local_target)?;
                             }
                             None => {}

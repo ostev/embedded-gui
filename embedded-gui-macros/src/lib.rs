@@ -43,7 +43,7 @@ fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
                         }
                     });
                     quote! {
-                        #(#method_calls)&*
+                        #(#method_calls)|*
                     }
                 } else {
                     quote!(false)
@@ -58,7 +58,7 @@ fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
                         }
                     });
                     quote! {
-                        #(#method_calls)&*
+                        #(#method_calls)|*
                     }
                 } else {
                     quote!(false)
@@ -82,7 +82,7 @@ fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
                         });
 
                         let interior = quote! {
-                            #(#method_calls)&*
+                            #(#method_calls)|*
                         };
 
                         let field_names = fields.named.iter().map(|field| field.ident.as_ref().unwrap());
@@ -99,7 +99,7 @@ fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
                         });
 
                         let interior = quote! {
-                            #(#method_calls)&*
+                            #(#method_calls)|*
                         };
 
                         quote_spanned! { variant.span() =>
@@ -107,9 +107,12 @@ fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
                         }
                     },
                     Fields::Unit => {
-                        quote_spanned! { variant.span() =>
-                            #qualified_name => false,
-                        }
+                        // quote_spanned! { variant.span() =>
+                        //     #qualified_name => false,
+                        // }
+                        Error::new(Span::mixed_site(), "Enums with empty variants cannot be reactive!")
+                            .to_compile_error()
+                            .into()
                     },
                 }
             });

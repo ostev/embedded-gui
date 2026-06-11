@@ -1,6 +1,7 @@
 use core::marker::PhantomData;
 
 use embedded_graphics::prelude::{Dimensions, DrawTarget};
+// use esp_println::println;
 
 use crate::{
     component::Component,
@@ -164,8 +165,11 @@ pub fn render<A: App>(
     app: &mut A,
     internal_state: &mut InternalState<A::Event, A::Msg, A::FocusKey>,
     display: &mut A::Target,
+    is_init: bool,
 ) -> Result<(), <A::Target as DrawTarget>::Error> {
-    if app.has_changed() {
+    // println!("Render actually");
+    if is_init || app.has_changed() {
+        // println!("has changed!");
         let view = app.view(&internal_state.factory);
 
         // Safety: the view is rendered immediately after being built from this factory.
@@ -178,6 +182,7 @@ pub fn render<A: App>(
                 internal_state.previous_focus_key,
                 display,
                 A::background_color(),
+                is_init,
             )
         };
 

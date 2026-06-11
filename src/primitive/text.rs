@@ -6,6 +6,7 @@ use embedded_graphics::{
     prelude::{PixelColor, Point},
     text::{Alignment, TextStyleBuilder},
 };
+// use esp_println::println;
 
 use crate::{
     layout::IntrinsicSize,
@@ -33,6 +34,7 @@ impl<'model, 'a, Color: PixelColor, T: DrawTarget<Color = Color>, S: AsRef<str>>
     for Text<'model, Color, S>
 {
     fn draw(&self, target: &mut crate::draw::LocalTarget<T>) -> Result<(), T::Error> {
+        // println!("Draw text!");
         let text_style = TextStyleBuilder::new()
             .alignment(Alignment::Left)
             .baseline(embedded_graphics::text::Baseline::Top)

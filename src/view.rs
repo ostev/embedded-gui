@@ -506,6 +506,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
                 widgets: Children::new(bumpalo::boxed::Box::new_in(children, &self.bump).into()),
                 direction,
                 phantom: PhantomData,
+                background: None,
             },
         }
     }
@@ -525,6 +526,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
                 widgets: children,
                 direction,
                 phantom: PhantomData,
+                background: None,
             },
         }
     }
@@ -642,6 +644,8 @@ struct ViewInternals<
     widgets: Children<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
     direction: Direction,
 
+    background: Option<T::Color>,
+
     phantom: PhantomData<Stage>,
 }
 
@@ -687,6 +691,12 @@ where
     AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
     AnyPrimitive: Primitive<T>,
 {
+    pub fn with_background(mut self, background: T::Color) -> Self {
+        self.internals.background = Some(background);
+
+        self
+    }
+
     /// This performs the initial sizing pass on the view's widgets, returning the sized view as well as
     /// the size for each fill widget or [`None`] if there aren't any widgets.
     fn compute_size_per_widget(
@@ -793,6 +803,8 @@ where
             ViewInternals {
                 widgets: self.internals.widgets,
                 direction: self.internals.direction,
+                background: self.internals.background,
+
                 phantom: PhantomData,
             },
             size_per_widget,
@@ -906,7 +918,8 @@ where
                         // println!("Primitive!");
                         match LocalTarget::try_new(target, origin + position, complex.size) {
                             Some(mut local_target) => {
-                                local_target.clear(background_color)?;
+                                local_target
+                                    .clear(sized_view.background.unwrap_or(background_color))?;
                                 primitive.draw(&mut local_target)?;
                             }
                             None => {}

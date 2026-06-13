@@ -2,6 +2,8 @@ use embedded_graphics::draw_target::DrawTarget;
 
 use crate::{draw::LocalTarget, layout::IntrinsicSize, signal::Reactive};
 
+pub mod owned_text;
+pub mod rectangle;
 pub mod spacer;
 pub mod text;
 

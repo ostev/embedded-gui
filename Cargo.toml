@@ -13,6 +13,7 @@ bumpalo = { version = "3.20", features = [
 ] }
 hashbrown = "0.17"
 embedded-graphics = "0.8"
+heapless = "0.9.3"
 # esp-println = { version = "0.17.0", features = ["esp32s3"] }
 
 [dev-dependencies]

@@ -1,6 +1,6 @@
-use bumpalo::boxed::Box;
 use embedded_graphics::draw_target::DrawTarget;
 
+pub mod background;
 pub mod button;
 pub mod group;
 

@@ -4,6 +4,7 @@ use crate::size::Size;
 pub enum Sizing {
     Intrinsic,
     Fill,
+    Constrained(u16),
 }
 
 #[derive(Clone, Copy)]

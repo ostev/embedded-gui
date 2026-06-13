@@ -83,8 +83,8 @@ impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> Change<Msg, 
         }
     }
 
-    pub const fn with_focus_key(mut self, focus_key: FocusKey) -> Self {
-        self.focus_key = Some(focus_key);
+    pub fn with_focus_key(mut self, focus_key: impl Into<FocusKey>) -> Self {
+        self.focus_key = Some(focus_key.into());
         self
     }
 

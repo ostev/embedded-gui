@@ -6,7 +6,7 @@ use embedded_graphics::draw_target::DrawTarget;
 // use esp_println::println;
 
 use crate::{
-    component::{Component, group::Group},
+    component::{Component, background::Background, group::Group},
     draw::LocalTarget,
     event::{Handler, HandlerRegistry},
     interactive::{self, FocusState},
@@ -615,6 +615,40 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
             self.centered(Direction::Horizontal, widget),
         )
     }
+    pub fn background<
+        'a,
+        T: DrawTarget,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
+        AnyPrimitive: Primitive<T>,
+        const N: usize,
+    >(
+        &'a self,
+        sizing: Sizing,
+        color: Signal<T::Color>,
+        children: [Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>; N],
+    ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
+    where
+        bumpalo::boxed::Box<'a, Background<T::Color>>: Into<AnyComponent>,
+    {
+        self.component(sizing, Background { color }, children)
+    }
+
+    pub fn background_ref<
+        'a,
+        T: DrawTarget,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
+        AnyPrimitive: Primitive<T>,
+    >(
+        &'a self,
+        sizing: Sizing,
+        color: Signal<T::Color>,
+        children: Children<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
+    ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
+    where
+        bumpalo::boxed::Box<'a, Background<T::Color>>: Into<AnyComponent>,
+    {
+        self.component_ref(sizing, Background { color }, children)
+    }
 }
 
 /// Represents a collection of widgets laid out in a set direction.
@@ -673,6 +707,22 @@ fn reduce_fill_space(direction: Direction) -> impl Fn(Size, Size) -> Size {
         },
     }
 }
+fn reduce_fill_space_constrained(direction: Direction) -> impl Fn(Size, u16) -> Size {
+    match direction {
+        Direction::Horizontal => |fill_space: Size, constraint: u16| {
+            Size::new(
+                fill_space.width.saturating_sub(constraint),
+                fill_space.height,
+            )
+        },
+        Direction::Vertical => |fill_space: Size, constraint: u16| {
+            Size::new(
+                fill_space.width,
+                fill_space.height.saturating_sub(constraint),
+            )
+        },
+    }
+}
 
 fn adjust_position(direction: Direction) -> impl Fn(Position, Size) -> Position {
     match direction {
@@ -709,6 +759,7 @@ where
         Option<Size>,
     ) {
         let reduce_fill_space = reduce_fill_space(self.internals.direction);
+        let reduce_fill_space_constrained = reduce_fill_space_constrained(self.internals.direction);
 
         /// This function is called in a recursive fold to calculate the size of a widget,
         /// mutating the original widget to store this information.
@@ -723,7 +774,9 @@ where
         >(
             bump: &'a Bump,
             focus_key: FocusKey,
+            direction: Direction,
             reduce_fill_space: &impl Fn(Size, Size) -> Size,
+            reduce_fill_space_constrained: &impl Fn(Size, u16) -> Size,
             (num_fill, fill_space): (u16, Size),
             Widget { variant, .. }: &mut Widget<
                 'a,
@@ -751,6 +804,17 @@ where
                         complex.size = size;
                         (num_fill, reduce_fill_space(fill_space, size))
                     }
+                    Sizing::Constrained(constraint) => {
+                        complex.size = match direction {
+                            Direction::Horizontal => Size::new(constraint, fill_space.height),
+                            Direction::Vertical => Size::new(fill_space.width, constraint),
+                        };
+
+                        (
+                            num_fill + 1,
+                            reduce_fill_space_constrained(fill_space, constraint),
+                        )
+                    }
                     Sizing::Fill => (num_fill + 1, fill_space),
                 }
             };
@@ -764,7 +828,9 @@ where
                     let (num_fill, fill_space) = size_widget(
                         bump,
                         focus_key,
+                        direction,
                         reduce_fill_space,
+                        reduce_fill_space_constrained,
                         (num_fill, fill_space),
                         &mut interactive.contents,
                     );
@@ -780,7 +846,9 @@ where
                 size_widget(
                     bump,
                     focus_key,
+                    self.internals.direction,
                     &reduce_fill_space,
+                    &reduce_fill_space_constrained,
                     (num_fill, fill_space),
                     widget,
                 )
@@ -858,6 +926,7 @@ where
 
                         adjust_position(position, complex.size)
                     }
+                    Sizing::Constrained(_) => adjust_position(position, complex.size),
                 },
                 WidgetVariant::Interactive(interactive) => update_position(
                     &mut interactive.contents,
@@ -909,7 +978,7 @@ where
                                 focus_key,
                                 previous_focus_key,
                                 target,
-                                background_color,
+                                sized_view.background.unwrap_or(background_color),
                                 is_init,
                             )?
                         };

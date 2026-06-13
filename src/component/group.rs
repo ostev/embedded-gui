@@ -13,8 +13,8 @@ use crate::{
 
 #[derive(Reactive)]
 pub struct Group {
-    direction: Signal<Direction>,
-    size: Signal<Size>,
+    pub direction: Signal<Direction>,
+    pub size: Signal<Size>,
 }
 
 impl Group {

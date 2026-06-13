@@ -41,7 +41,7 @@ impl<'model, 'a, Color: PixelColor, T: DrawTarget<Color = Color>, S: AsRef<str>>
             .build();
 
         embedded_graphics::text::Text::with_text_style(
-            self.content.as_ref(),
+            self.content.as_ref().as_ref(),
             Point::zero(),
             *self.font_style,
             text_style,

@@ -1,4 +1,7 @@
-use core::{fmt::Debug, ops::Deref};
+use core::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
 
 use alloc::{borrow::Cow, rc::Rc};
 use bumpalo::{Bump, boxed::Box};
@@ -118,6 +121,21 @@ impl<T> Reactive for Source<T> {
     }
 }
 
+impl<T> Deref for Source<T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+impl<T> DerefMut for Source<T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
 // impl<T: Debug> Debug for Signal<T> {
 //     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 //         f.debug_struct("Signal")
@@ -128,11 +146,11 @@ impl<T> Reactive for Source<T> {
 // }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Signal<T: Copy> {
+pub struct Signal<T> {
     source: Source<T>,
 }
 
-impl<T: Copy> Signal<T> {
+impl<T> Signal<T> {
     pub fn constant(value: T) -> Signal<T> {
         Signal {
             source: Source {
@@ -142,31 +160,31 @@ impl<T: Copy> Signal<T> {
         }
     }
 
-    pub fn map<U: Copy>(&self, f: impl Fn(T) -> U) -> Signal<U> {
+    pub fn map<U>(&self, f: impl Fn(&T) -> U) -> Signal<U> {
         Signal {
             source: Source {
-                value: f(self.source.value),
+                value: f(&self.source.value),
                 has_changed: self.source.has_changed,
             },
         }
     }
 
-    pub fn map_to_ref<'a, U>(&self, bump: &'a Bump, f: impl Fn(T) -> U) -> SignalRef<'a, U> {
+    pub fn map_to_ref<'a, U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
         SignalRef::new(SignalRefVariant::Owned(Source {
-            value: Rc::new_in(f(self.source.value), bump),
+            value: Rc::new_in(f(&self.source.value), bump),
             has_changed: self.source.has_changed,
         }))
     }
 }
 
-impl<T: Copy> Reactive for Signal<T> {
+impl<T> Reactive for Signal<T> {
     #[inline]
     fn has_changed(&self) -> bool {
         self.source.has_changed
     }
 }
 
-impl<T: Copy> Deref for Signal<T> {
+impl<T> Deref for Signal<T> {
     type Target = T;
 
     #[inline]
@@ -231,6 +249,38 @@ impl<'a, T> SignalRef<'a, T> {
                 has_changed: signal.has_changed,
             }),
         })
+    }
+
+    pub fn map<U>(&self, f: impl Fn(&T) -> U) -> Signal<U> {
+        Signal {
+            source: match &self.variant {
+                SignalRefVariant::Owned(signal) => Source {
+                    value: f(&signal.value),
+                    has_changed: signal.has_changed,
+                },
+                SignalRefVariant::Borrowed(signal) => Source {
+                    value: f(&signal.value),
+                    has_changed: signal.has_changed,
+                },
+            },
+        }
+    }
+
+    pub fn signal<'b>(&'b self) -> Signal<&'b T> {
+        match &self.variant {
+            SignalRefVariant::Owned(signal) => Signal {
+                source: Source {
+                    value: signal.value.as_ref(),
+                    has_changed: signal.has_changed,
+                },
+            },
+            SignalRefVariant::Borrowed(signal) => Signal {
+                source: Source {
+                    value: &signal.value,
+                    has_changed: signal.has_changed,
+                },
+            },
+        }
     }
 }
 

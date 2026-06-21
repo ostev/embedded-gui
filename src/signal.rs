@@ -29,6 +29,7 @@ macro_rules! reactive_impl {
 reactive_impl!(&'a T);
 
 reactive_impl!(alloc::boxed::Box<T>);
+reactive_impl!(alloc::boxed::Box<T, &'a Bump>);
 reactive_impl!(alloc::rc::Rc<T>);
 reactive_impl!(alloc::sync::Arc<T>);
 
@@ -69,6 +70,12 @@ impl<T> Source<T> {
     #[inline]
     pub fn set(&mut self, new_value: T) {
         self.value = new_value;
+        self.mark_changed();
+    }
+
+    #[inline]
+    pub fn set_with(&mut self, updater: impl FnOnce(&T) -> T) {
+        self.value = updater(&self.value);
         self.mark_changed();
     }
 
@@ -146,12 +153,6 @@ impl<T> Deref for Source<T> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.value
-    }
-}
-impl<T> DerefMut for Source<T> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
     }
 }
 

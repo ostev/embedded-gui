@@ -111,18 +111,21 @@ impl<'a, Color: PixelColor + Debug, T: DrawTarget<Color = Color>> DrawTarget
     where
         I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>>,
     {
-        self.target.draw_iter(pixels.into_iter().map(|pixel| {
-            let Pixel(position, color) = pixel;
+        self.target
+            .draw_iter(pixels.into_iter().filter_map(|pixel| {
+                let Pixel(position, color) = pixel;
 
-            if within_bounds(position, self.bottom_right) {
-                let absolute_x = position.x + self.position.x as i32;
-                let absolute_y = position.y + self.position.y as i32;
+                if within_bounds(position, self.bottom_right) {
+                    let absolute_x = position.x + self.position.x as i32;
+                    let absolute_y = position.y + self.position.y as i32;
 
-                Pixel(Point::new(absolute_x, absolute_y), color)
-            } else {
-                panic!("Provided pixel position is out of bounds!")
-            }
-        }))?;
+                    Some(Pixel(Point::new(absolute_x, absolute_y), color))
+                } else {
+                    // panic!("Provided pixel position is out of bounds!")
+                    // Ignore
+                    None
+                }
+            }))?;
 
         Ok(())
     }

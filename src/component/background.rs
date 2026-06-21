@@ -1,6 +1,7 @@
 use core::fmt::Debug;
 
-use bumpalo::boxed::Box;
+use alloc::boxed::Box;
+use bumpalo::Bump;
 use embedded_graphics::{draw_target::DrawTarget, mono_font::MonoTextStyle, prelude::PixelColor};
 
 use crate::{
@@ -35,7 +36,7 @@ impl<
     AnyPrimitive: Primitive<T>,
 > Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive> for Background<Color>
 where
-    Box<'a, Self>: Into<AnyComponent>,
+    Box<Self, &'a Bump>: Into<AnyComponent>,
 {
     fn view(
         &self,

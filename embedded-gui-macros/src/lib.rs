@@ -341,7 +341,7 @@ fn build_enum_variants(variants: &[EnumVariantInfo]) -> Vec<TokenStream> {
             let unqualified_name = &variant.unqualified_name;
             let field_type = &variant.field_type;
             quote! {
-                #unqualified_name(::bumpalo::boxed::Box<'a, #field_type>)
+                #unqualified_name(::alloc::boxed::Box<#field_type, &'a ::bumpalo::Bump>)
             }
         })
         .collect()
@@ -362,8 +362,8 @@ fn build_from_impls(
             let qualified_name = &variant.qualified_name;
             let field_type = &variant.field_type;
             quote! {
-                impl #impl_generics From<::bumpalo::boxed::Box<#lifetime_generic, #field_type>> for #type_name #ty_generics #where_clause {
-                    fn from(#param_name: ::bumpalo::boxed::Box<#lifetime_generic, #field_type>) -> Self {
+                impl #impl_generics From<::alloc::boxed::Box<#field_type, &'a ::bumpalo::Bump>> for #type_name #ty_generics #where_clause {
+                    fn from(#param_name: ::alloc::boxed::Box<#field_type, &'a ::bumpalo::Bump>) -> Self {
                         #qualified_name(#param_name)
                     }
                 }

@@ -32,14 +32,11 @@ impl<FocusKey: interactive::Key, Event, Msg> HandlerRegistry<FocusKey, Event, Ms
     }
 
     pub(crate) fn dispatch(&self, focus_key: &FocusKey, event: Event) -> Option<Msg> {
-        println!("Dispatching event to focus key {:?}", focus_key);
         let handles = self.handles.borrow();
         let handler = handles.get(focus_key);
-        println!("Handler exists? {}", handler.is_some());
         let msg = handler
             .map(|Handler { handler }| (handler)(event))
             .flatten();
-        println!("Handler produced a msg: {}", msg.is_some());
         msg
     }
 }

@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 
-use alloc::{borrow::Cow, string::String};
-use bumpalo::boxed::Box;
+use alloc::{borrow::Cow, boxed::Box, string::String};
+use bumpalo::Bump;
 use embedded_graphics::{draw_target::DrawTarget, mono_font::MonoTextStyle, prelude::PixelColor};
 
 use crate::{
@@ -45,9 +45,9 @@ impl<
     S: AsRef<str> + Clone + 'a,
 > Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive> for Button<'a, Color, S>
 where
-    Box<'a, Self>: Into<AnyComponent>,
-    Box<'a, Spacer>: Into<AnyPrimitive>,
-    Box<'a, Text<'a, T::Color, S>>: Into<AnyPrimitive>,
+    Box<Self, &'a Bump>: Into<AnyComponent>,
+    Box<Spacer, &'a Bump>: Into<AnyPrimitive>,
+    Box<Text<'a, T::Color, S>, &'a Bump>: Into<AnyPrimitive>,
 {
     fn view(
         &self,

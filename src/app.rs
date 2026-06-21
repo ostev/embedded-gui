@@ -57,7 +57,7 @@ pub trait App: State + Reactive {
         Self::AnyPrimitive<'a>,
     >;
 
-    fn default_event_handler(&self, event: Self::Event) -> Option<Self::Msg>;
+    fn global_event_handler(&self, event: Self::Event) -> Option<Self::Msg>;
 }
 
 pub struct Change<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> {
@@ -86,6 +86,13 @@ impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> Change<Msg, 
 
     pub fn with_focus_key(mut self, focus_key: impl Into<FocusKey>) -> Self {
         self.focus_key = Some(focus_key.into());
+        self
+    }
+
+    pub fn with_focus_key_if_present(mut self, focus_key: Option<impl Into<FocusKey>>) -> Self {
+        if let Some(focus_key) = focus_key {
+            self.focus_key = Some(focus_key.into());
+        }
         self
     }
 
@@ -118,10 +125,9 @@ pub async fn dispatch<A: App>(
     events: impl IntoIterator<Item = A::Event>,
 ) {
     for event in events {
-        let msg = internal_state
-            .factory
-            .dispatch(event)
-            .or_else(|| app.default_event_handler(event));
+        let msg = app
+            .global_event_handler(event)
+            .or_else(|| internal_state.factory.dispatch(event));
         if let Some(msg) = msg {
             dispatch_msg(app, effect_context, internal_state, msg).await;
         }
@@ -163,12 +169,8 @@ pub fn render<A: App>(
 where
     <A::Target as DrawTarget>::Color: Debug,
 {
-    // println!("Render actually");
-    println!(
-        "has focus changed? {}",
-        internal_state.factory.has_focus_changed()
-    );
     if is_init || internal_state.factory.has_focus_changed() || app.has_changed() {
+        println!("Focus key: {:?}", internal_state.factory.focus_key());
         let view = app.view(&internal_state.factory);
 
         // Safety: the view is rendered immediately after being built from this factory.

@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use alloc::{borrow::Cow, string::String};
 use bumpalo::boxed::Box;
 use embedded_graphics::{draw_target::DrawTarget, mono_font::MonoTextStyle, prelude::PixelColor};
@@ -33,7 +35,7 @@ impl<'model, Color: PixelColor, S: AsRef<str> + Clone> IntrinsicSize for Button<
 
 impl<
     'a,
-    Color: PixelColor + 'a,
+    Color: PixelColor + 'a + Debug,
     T: DrawTarget<Color = Color>,
     Event,
     Msg,

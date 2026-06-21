@@ -1,8 +1,9 @@
-use core::{marker::PhantomData, mem::ManuallyDrop};
+use core::{fmt::Debug, marker::PhantomData, mem::ManuallyDrop};
 
 use alloc::boxed::Box;
 use bumpalo::Bump;
 use embedded_graphics::draw_target::DrawTarget;
+use esp_println::println;
 // use esp_println::println;
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
     layout::{Direction, Sizing},
     position::Position,
     primitive::{Primitive, spacer::Spacer},
-    signal::Signal,
+    signal::{Signal, Source},
     size::Size,
 };
 
@@ -237,13 +238,19 @@ impl<
             Self::Complex(complex) => complex.inner.has_changed(focus_key, previous_focus_key),
             Self::Interactive(interactive) => {
                 let has_focus_changed = Some(focus_key) != previous_focus_key;
-                (has_focus_changed
+                // println!(
+                //     "has focus changed? {}, interactive key: {:?}, current focus key: {:?}, previous focus key: {:?}",
+                //     has_focus_changed, interactive.key, focus_key, previous_focus_key
+                // );
+                let has_changed = (has_focus_changed
                     && (interactive.key == focus_key
                         || Some(interactive.key) == previous_focus_key))
                     || interactive
                         .contents
                         .variant
-                        .has_changed(focus_key, previous_focus_key)
+                        .has_changed(focus_key, previous_focus_key);
+                // println!("interactive has changed? {}", has_changed);
+                has_changed
             } // Self::Layered(LayeredWidget { layers }) => layers
               //     .iter()
               //     .any(|Widget(widget)| unsafe { widget.has_changed(has_focus_changed) }),
@@ -295,22 +302,6 @@ impl<
             size: Size::zero(),
         })
     }
-
-    // fn interactive(
-    //     bump: &'a Bump,
-    //     key: FocusKey,
-    //     event_handler: impl Fn(Event) -> Msg,
-    //     view: impl FnOnce(Option<&FocusState>) -> Widget<'a, T, Event, Msg, FocusKey>,
-    // ) -> Self {
-    //     WidgetVariant::Interactive(InteractiveWidget {
-    //         key,
-    //         event_handler: Some(event::Handler {
-    //             handler: Box::new(event_handler),
-    //         }),
-    //         view: Box::new(view),
-    //         evaluated: None,
-    //     })
-    // }
 
     fn interactive_ref(
         key: FocusKey,
@@ -371,25 +362,30 @@ pub struct Factory<Event, GlobalMsg, GlobalFocusKey: interactive::Key> {
     handler_registry: HandlerRegistry<GlobalFocusKey, Event, GlobalMsg>,
 
     focus_key: GlobalFocusKey,
-    focus_state: FocusState,
+    previous_focus_key: Option<GlobalFocusKey>,
 }
 
 impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMsg, GlobalFocusKey> {
     pub fn new(focus_key: GlobalFocusKey) -> Self {
         Self {
             bump: Bump::new(),
-            focus_state: FocusState::Unfocused,
             focus_key,
+            previous_focus_key: None,
             handler_registry: HandlerRegistry::new(),
         }
     }
 
+    pub(crate) fn focus_key(&self) -> GlobalFocusKey {
+        self.focus_key
+    }
+
     pub(crate) fn set_focus_key(&mut self, key: GlobalFocusKey) {
+        self.previous_focus_key = Some(self.focus_key);
         self.focus_key = key;
     }
 
-    pub(crate) fn set_focus_state(&mut self, state: FocusState) {
-        self.focus_state = state;
+    pub(crate) fn has_focus_changed(&self) -> bool {
+        Some(self.focus_key) != self.previous_focus_key
     }
 
     pub(crate) fn dispatch(&self, event: Event) -> Option<GlobalMsg> {
@@ -406,24 +402,28 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
     >(
         &'a self,
         key: FocusKey,
-        event_handler: impl Fn(Event) -> Msg + 'static,
+        event_handler: impl Fn(Event) -> Option<Msg> + 'static,
         view: impl FnOnce(
-            Option<FocusState>,
+            Signal<FocusState>,
         )
             -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive> {
         let global_key: GlobalFocusKey = key.into();
 
+        let has_changed = Some(self.focus_key) != self.previous_focus_key
+            && (global_key == self.focus_key || Some(global_key) == self.previous_focus_key);
         let state = if self.focus_key == global_key {
-            Some(self.focus_state)
+            Source::custom(FocusState::Focused, has_changed).signal()
         } else {
-            None
+            Source::custom(FocusState::Unfocused, has_changed).signal()
         };
 
         let contents = view(state);
 
         // Box the event_handler into a trait object so it can be moved into a 'static closure
-        let mapped_handler = Handler::new(Box::new(move |event| event_handler(event).into()));
+        let mapped_handler = Handler::new(Box::new(move |event| {
+            event_handler(event).map(|msg| msg.into())
+        }));
         self.handler_registry.register(global_key, mapped_handler);
 
         Widget::new(WidgetVariant::interactive_ref(
@@ -545,7 +545,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         self.primitive(Sizing::Fill, Spacer::zero())
     }
 
-    pub fn group<
+    pub fn group_fill<
         'a,
         const N: usize,
         T: DrawTarget,
@@ -563,6 +563,25 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         self.component(Sizing::Fill, component, children)
     }
 
+    pub fn group<
+        'a,
+        const N: usize,
+        T: DrawTarget,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
+        AnyPrimitive: Primitive<T>,
+    >(
+        &'a self,
+        direction: Direction,
+        sizing: Sizing,
+        children: [Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>; N],
+    ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
+    where
+        bumpalo::boxed::Box<'a, Group>: Into<AnyComponent>,
+    {
+        let component = Group::zero(Signal::constant(direction));
+        self.component(sizing, component, children)
+    }
+
     pub fn group_ref<
         'a,
         T: DrawTarget,
@@ -571,13 +590,14 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
     >(
         &'a self,
         direction: Direction,
+        sizing: Sizing,
         children: Children<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
         bumpalo::boxed::Box<'a, Group>: Into<AnyComponent>,
     {
         let component: Group = Group::zero(Signal::constant(direction));
-        self.component_ref(Sizing::Fill, component, children)
+        self.component_ref(sizing, component, children)
     }
 
     pub fn centered<
@@ -594,7 +614,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         bumpalo::boxed::Box<'a, Group>: Into<AnyComponent>,
         bumpalo::boxed::Box<'a, Spacer>: Into<AnyPrimitive>,
     {
-        self.group(direction, [self.spacer(), widget, self.spacer()])
+        self.group_fill(direction, [self.spacer(), widget, self.spacer()])
     }
 
     pub fn middle<
@@ -629,6 +649,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
         bumpalo::boxed::Box<'a, Background<T::Color>>: Into<AnyComponent>,
+        T::Color: Debug,
     {
         self.component(sizing, Background { color }, children)
     }
@@ -646,6 +667,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
         bumpalo::boxed::Box<'a, Background<T::Color>>: Into<AnyComponent>,
+        T::Color: Debug,
     {
         self.component_ref(sizing, Background { color }, children)
     }
@@ -740,6 +762,7 @@ impl<'a, T: DrawTarget, Event, Msg, FocusKey: interactive::Key, AnyComponent, An
 where
     AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
     AnyPrimitive: Primitive<T>,
+    T::Color: Debug,
 {
     pub fn with_background(mut self, background: T::Color) -> Self {
         self.internals.background = Some(background);
@@ -801,6 +824,7 @@ where
                 match complex.sizing {
                     Sizing::Intrinsic => {
                         let size = complex.intrinsic_size();
+                        // println!("Intrinsic size: {:?}", size);
                         complex.size = size;
                         (num_fill, reduce_fill_space(fill_space, size))
                     }
@@ -811,7 +835,7 @@ where
                         };
 
                         (
-                            num_fill + 1,
+                            num_fill,
                             reduce_fill_space_constrained(fill_space, constraint),
                         )
                     }
@@ -884,14 +908,16 @@ where
         factory: &'a Factory<Event, Msg, FocusKey>,
         origin: Position,
         available_space: Size,
-        focus_key: FocusKey,
-        previous_focus_key: Option<FocusKey>,
         target: &mut T,
         background_color: T::Color,
         is_init: bool,
     ) -> Result<(), T::Error> {
+        // println!(
+        //     "available spacer of {:?} at point {:?}",
+        //     available_space, origin
+        // );
         let (mut sized_view, size_per_widget_option) =
-            self.compute_size_per_widget(&factory.bump, available_space, focus_key);
+            self.compute_size_per_widget(&factory.bump, available_space, factory.focus_key);
         let size_per_widget = size_per_widget_option.unwrap_or(Size::zero());
 
         let adjust_position = adjust_position(sized_view.direction);
@@ -919,15 +945,18 @@ where
             position: Position,
         ) -> Position {
             match variant {
-                WidgetVariant::Complex(complex) => match complex.sizing {
-                    Sizing::Intrinsic => adjust_position(position, complex.size),
-                    Sizing::Fill => {
-                        complex.size = size_per_widget;
+                WidgetVariant::Complex(complex) => {
+                    // println!("Complex size {:?}", complex.size);
+                    match complex.sizing {
+                        Sizing::Intrinsic => adjust_position(position, complex.size),
+                        Sizing::Fill => {
+                            complex.size = size_per_widget;
 
-                        adjust_position(position, complex.size)
+                            adjust_position(position, complex.size)
+                        }
+                        Sizing::Constrained(_) => adjust_position(position, complex.size),
                     }
-                    Sizing::Constrained(_) => adjust_position(position, complex.size),
-                },
+                }
                 WidgetVariant::Interactive(interactive) => update_position(
                     &mut interactive.contents,
                     adjust_position,
@@ -942,7 +971,9 @@ where
         for widget in (sized_view.widgets.0).iter_mut() {
             // println!("Widget!");
 
-            let has_changed = widget.variant.has_changed(focus_key, previous_focus_key);
+            let has_changed = widget
+                .variant
+                .has_changed(factory.focus_key, factory.previous_focus_key);
 
             let new_position = update_position(widget, &adjust_position, size_per_widget, position);
 
@@ -975,8 +1006,6 @@ where
                                 factory,
                                 origin + position,
                                 complex.size,
-                                focus_key,
-                                previous_focus_key,
                                 target,
                                 sized_view.background.unwrap_or(background_color),
                                 is_init,

@@ -1,3 +1,4 @@
+use core::fmt::Debug;
 use core::hash::Hash;
 use core::u16;
 
@@ -118,11 +119,20 @@ pub(crate) struct FocusNode<K: Key> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FocusState {
-    Unfocused,
     Focused,
-    Active,
+    Unfocused,
 }
 
-pub trait Key: Copy + Eq + Hash {}
+impl FocusState {
+    #[inline]
+    pub const fn is_focused(self) -> bool {
+        match self {
+            FocusState::Focused => true,
+            FocusState::Unfocused => false,
+        }
+    }
+}
 
-impl<T: Copy + Eq + Hash> Key for T {}
+pub trait Key: Copy + Eq + Hash + Debug {}
+
+impl<T: Copy + Eq + Hash + Debug> Key for T {}

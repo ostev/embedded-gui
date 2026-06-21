@@ -1,6 +1,7 @@
-use core::marker::PhantomData;
+use core::{fmt::Debug, marker::PhantomData};
 
 use embedded_graphics::prelude::{Dimensions, DrawTarget};
+use esp_println::println;
 // use esp_println::println;
 
 use crate::{
@@ -59,7 +60,6 @@ pub trait App: State + Reactive {
 
 pub struct Change<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> {
     focus_key: Option<FocusKey>,
-    focus_state: Option<FocusState>,
     effect: Option<E>,
 
     phantom: PhantomData<Msg>,
@@ -69,15 +69,14 @@ impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> Default
     for Change<Msg, FocusKey, E>
 {
     fn default() -> Self {
-        Self::none()
+        Self::new()
     }
 }
 
 impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> Change<Msg, FocusKey, E> {
-    pub const fn none() -> Self {
+    pub const fn new() -> Self {
         Self {
             focus_key: None,
-            focus_state: None,
             effect: None,
             phantom: PhantomData,
         }
@@ -85,11 +84,6 @@ impl<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> Change<Msg, 
 
     pub fn with_focus_key(mut self, focus_key: impl Into<FocusKey>) -> Self {
         self.focus_key = Some(focus_key.into());
-        self
-    }
-
-    pub const fn with_focus_state(mut self, focus_state: FocusState) -> Self {
-        self.focus_state = Some(focus_state);
         self
     }
 
@@ -104,16 +98,12 @@ pub trait State {
 }
 
 pub struct InternalState<Event, Msg, FocusKey: interactive::Key> {
-    current_focus_key: FocusKey,
-    previous_focus_key: Option<FocusKey>,
     factory: Factory<Event, Msg, FocusKey>,
 }
 
 impl<Event, Msg, FocusKey: interactive::Key> InternalState<Event, Msg, FocusKey> {
     pub fn new(focus_key: FocusKey) -> Self {
         Self {
-            current_focus_key: focus_key,
-            previous_focus_key: None,
             factory: Factory::new(focus_key),
         }
     }
@@ -132,7 +122,7 @@ pub async fn dispatch<A: App>(
     }
 }
 
-async fn dispatch_msg<A: App>(
+pub async fn dispatch_msg<A: App>(
     app: &mut A,
     effect_context: &mut <A::Effect as Effect>::Context,
     internal_state: &mut InternalState<A::Event, A::Msg, A::FocusKey>,
@@ -141,21 +131,24 @@ async fn dispatch_msg<A: App>(
     let mut next_msg = Some(msg);
 
     while let Some(msg) = next_msg.take() {
+        println!(
+            "Dispatching message: {:?}",
+            core::any::type_name::<A::Msg>()
+        );
         let change = app.update(msg);
 
         if let Some(key) = change.focus_key {
-            internal_state.previous_focus_key = Some(internal_state.current_focus_key);
-            internal_state.current_focus_key = key;
-
             internal_state.factory.set_focus_key(key);
-        }
-
-        if let Some(state) = change.focus_state {
-            internal_state.factory.set_focus_state(state);
+            println!("Focus key changed to {:?}", key);
+        } else {
+            internal_state
+                .factory
+                .set_focus_key(internal_state.factory.focus_key());
+            println!("Focus key unchanged");
         }
 
         next_msg = match change.effect {
-            Some(effect) => Some(effect.run(effect_context).await),
+            Some(effect) => effect.run(effect_context).await,
             None => None,
         };
     }
@@ -166,10 +159,16 @@ pub fn render<A: App>(
     internal_state: &mut InternalState<A::Event, A::Msg, A::FocusKey>,
     display: &mut A::Target,
     is_init: bool,
-) -> Result<(), <A::Target as DrawTarget>::Error> {
+) -> Result<(), <A::Target as DrawTarget>::Error>
+where
+    <A::Target as DrawTarget>::Color: Debug,
+{
     // println!("Render actually");
-    if is_init || app.has_changed() {
-        // println!("has changed!");
+    println!(
+        "has focus changed? {}",
+        internal_state.factory.has_focus_changed()
+    );
+    if is_init || internal_state.factory.has_focus_changed() || app.has_changed() {
         let view = app.view(&internal_state.factory);
 
         // Safety: the view is rendered immediately after being built from this factory.
@@ -178,8 +177,6 @@ pub fn render<A: App>(
                 &internal_state.factory,
                 Position::zero(),
                 display.bounding_box().size.into(),
-                internal_state.current_focus_key,
-                internal_state.previous_focus_key,
                 display,
                 A::background_color(),
                 is_init,

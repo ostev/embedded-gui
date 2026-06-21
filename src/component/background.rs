@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use bumpalo::boxed::Box;
 use embedded_graphics::{draw_target::DrawTarget, mono_font::MonoTextStyle, prelude::PixelColor};
 
@@ -24,7 +26,7 @@ impl<Color: PixelColor> IntrinsicSize for Background<Color> {
 
 impl<
     'a,
-    Color: PixelColor + 'a,
+    Color: PixelColor + 'a + Debug,
     T: DrawTarget<Color = Color>,
     Event,
     Msg,

@@ -1,6 +1,9 @@
+use core::fmt::Debug;
+
 use embedded_graphics::Pixel;
 use embedded_graphics::prelude::{Dimensions, DrawTarget, OriginDimensions, PixelColor, Point};
 use embedded_graphics::primitives::Rectangle;
+use esp_println::println;
 
 use crate::position::Position;
 use crate::size::Size;
@@ -53,7 +56,7 @@ pub struct LocalTarget<'a, T: DrawTarget> {
 impl<'a, T: DrawTarget> LocalTarget<'a, T> {
     /// Creates a new draw target. If the provided size is zero in either dimension,
     /// it returns `None` instead.
-    pub(crate) fn try_new(target: &'a mut T, position: Position, size: Size) -> Option<Self> {
+    pub fn try_new(target: &'a mut T, position: Position, size: Size) -> Option<Self> {
         size.bottom_right().map(|bottom_right| Self {
             target,
             position,
@@ -86,10 +89,10 @@ impl<'a, T: DrawTarget> OriginDimensions for LocalTarget<'a, T> {
 const fn within_bounds(position: Point, bottom_right: Point) -> bool {
     #[cfg(feature = "clipping")]
     {
-        (position.x > 0)
-            && (position.x < bottom_right.x as i32)
-            && (position.y > 0)
-            && (position.y < bottom_right.y as i32)
+        (position.x >= 0)
+            && (position.x <= bottom_right.x as i32)
+            && (position.y >= 0)
+            && (position.y <= bottom_right.y as i32)
     }
     #[cfg(not(feature = "clipping"))]
     {
@@ -97,7 +100,9 @@ const fn within_bounds(position: Point, bottom_right: Point) -> bool {
     }
 }
 
-impl<'a, Color: PixelColor, T: DrawTarget<Color = Color>> DrawTarget for LocalTarget<'a, T> {
+impl<'a, Color: PixelColor + Debug, T: DrawTarget<Color = Color>> DrawTarget
+    for LocalTarget<'a, T>
+{
     type Color = Color;
 
     type Error = T::Error;
@@ -126,17 +131,20 @@ impl<'a, Color: PixelColor, T: DrawTarget<Color = Color>> DrawTarget for LocalTa
     where
         I: IntoIterator<Item = Self::Color>,
     {
-        #[cfg(feature = "clipping")]
-        let clipped = area.intersection(&self.local_bounds());
+        // #[cfg(feature = "clipping")]
+        // let clipped = area.intersection(&self.local_bounds());
 
-        #[cfg(not(feature = "clipping"))]
-        let clipped = area;
+        // #[cfg(not(feature = "clipping"))]
+        // let clipped = area;
 
-        let absolute_top_left =
-            clipped.top_left + Point::new(self.position.x as i32, self.position.y as i32);
-        let transformed_area = Rectangle::new(absolute_top_left, area.size);
+        // if area.
 
-        self.target.fill_contiguous(&transformed_area, colors)
+        // let absolute_top_left =
+        //     clipped.top_left + Point::new(self.position.x as i32, self.position.y as i32);
+        // let transformed_area = Rectangle::new(absolute_top_left, area.size);
+
+        // self.target.fill_contiguous(&transformed_area, colors)
+        todo!()
     }
 
     fn fill_solid(&mut self, area: &Rectangle, color: Self::Color) -> Result<(), Self::Error> {
@@ -148,12 +156,15 @@ impl<'a, Color: PixelColor, T: DrawTarget<Color = Color>> DrawTarget for LocalTa
 
         let absolute_top_left =
             clipped.top_left + Point::new(self.position.x as i32, self.position.y as i32);
-        let transformed_area = Rectangle::new(absolute_top_left, area.size);
+        let transformed_area = Rectangle::new(absolute_top_left, clipped.size);
+        // println!("Fill solid {:?} with color {:?}", transformed_area, color);
 
         self.target.fill_solid(&transformed_area, color)
     }
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.target.fill_solid(&self.bounding_box(), color)
+        // self.target.fill_solid(&self.bounding_box(), color)
+        // println!("Local bounds: {:?}", self.local_bounds());
+        self.fill_solid(&self.local_bounds(), color)
     }
 }

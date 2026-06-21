@@ -58,6 +58,14 @@ impl<T> Source<T> {
         }
     }
 
+    /// Creates a new [`Source`] with a custom initial change state. Make
+    /// sure that this `has_changed` state is correct, otherwise your application
+    /// will misbehave.
+    #[inline]
+    pub(crate) fn custom(value: T, has_changed: bool) -> Self {
+        Self { value, has_changed }
+    }
+
     #[inline]
     pub fn set(&mut self, new_value: T) {
         self.value = new_value;
@@ -169,7 +177,7 @@ impl<T> Signal<T> {
         }
     }
 
-    pub fn map_to_ref<'a, U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
+    pub fn map_to_owned_ref<'a, U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
         SignalRef::new(SignalRefVariant::Owned(Source {
             value: Rc::new_in(f(&self.source.value), bump),
             has_changed: self.source.has_changed,
@@ -238,7 +246,7 @@ impl<'a, T> SignalRef<'a, T> {
         }))
     }
 
-    pub fn map_to_ref<U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
+    pub fn map_ref<U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
         SignalRef::new(match &self.variant {
             SignalRefVariant::Owned(signal) => SignalRefVariant::Owned(Source {
                 value: Rc::new_in(f(&signal.value), bump),

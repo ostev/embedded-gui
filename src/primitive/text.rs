@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use alloc::{borrow::Cow, string::String};
 use embedded_graphics::{
     Drawable,
@@ -30,8 +32,8 @@ impl<'model, 'a, Color: PixelColor, S: AsRef<str>> IntrinsicSize for Text<'model
     }
 }
 
-impl<'model, 'a, Color: PixelColor, T: DrawTarget<Color = Color>, S: AsRef<str>> Primitive<T>
-    for Text<'model, Color, S>
+impl<'model, 'a, Color: PixelColor + Debug, T: DrawTarget<Color = Color>, S: AsRef<str>>
+    Primitive<T> for Text<'model, Color, S>
 {
     fn draw(&self, target: &mut crate::draw::LocalTarget<T>) -> Result<(), T::Error> {
         // println!("Draw text!");

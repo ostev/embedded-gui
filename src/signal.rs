@@ -108,6 +108,17 @@ impl<T> Source<T> {
     }
 }
 
+impl<'a, T> Source<Option<T>> {
+    pub fn option_signal_ref(&'a self) -> Option<SignalRef<'a, T>> {
+        self.value.as_ref().map(|value| {
+            SignalRef::new(SignalRefVariant::Borrowed(Source {
+                value,
+                has_changed: self.has_changed,
+            }))
+        })
+    }
+}
+
 impl<T: Copy> Source<T> {
     #[inline(always)]
     pub fn signal(&self) -> Signal<T> {
@@ -143,15 +154,6 @@ impl<T> DerefMut for Source<T> {
         &mut self.value
     }
 }
-
-// impl<T: Debug> Debug for Signal<T> {
-//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-//         f.debug_struct("Signal")
-//             .field("value", &self.value)
-//             .field("has_changed", &self.has_changed)
-//             .finish()
-//     }
-// }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Signal<T> {
@@ -289,6 +291,30 @@ impl<'a, T> SignalRef<'a, T> {
                 },
             },
         }
+    }
+}
+
+impl<'a, T> SignalRef<'a, Option<T>>
+where
+    T: Clone,
+{
+    pub fn to_option_ref(&self, bump: &'a Bump) -> Option<SignalRef<'a, T>> {
+        let variant = match &self.variant {
+            SignalRefVariant::Borrowed(source) => source.value.as_ref().map(|value| {
+                SignalRefVariant::Borrowed(Source {
+                    value,
+                    has_changed: source.has_changed,
+                })
+            }),
+            SignalRefVariant::Owned(source) => Option::as_ref(&source.value).map(|value| {
+                SignalRefVariant::Owned(Source {
+                    value: Rc::new_in(value.clone(), bump),
+                    has_changed: source.has_changed,
+                })
+            }),
+        };
+
+        variant.map(SignalRef::new)
     }
 }
 

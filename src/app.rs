@@ -19,7 +19,7 @@ pub use embedded_gui_macros::State;
 pub trait App: State + Reactive {
     type Target: DrawTarget;
     type Msg;
-    type Event;
+    type Event: Copy;
     type FocusKey: interactive::Key;
     type AnyComponent<'a>: Component<
             'a,
@@ -56,6 +56,8 @@ pub trait App: State + Reactive {
         Self::AnyComponent<'a>,
         Self::AnyPrimitive<'a>,
     >;
+
+    fn default_event_handler(&self, event: Self::Event) -> Option<Self::Msg>;
 }
 
 pub struct Change<Msg, FocusKey: interactive::Key, E: effect::Effect<Msg = Msg>> {
@@ -116,7 +118,11 @@ pub async fn dispatch<A: App>(
     events: impl IntoIterator<Item = A::Event>,
 ) {
     for event in events {
-        if let Some(msg) = internal_state.factory.dispatch(event) {
+        let msg = internal_state
+            .factory
+            .dispatch(event)
+            .or_else(|| app.default_event_handler(event));
+        if let Some(msg) = msg {
             dispatch_msg(app, effect_context, internal_state, msg).await;
         }
     }
@@ -131,20 +137,14 @@ pub async fn dispatch_msg<A: App>(
     let mut next_msg = Some(msg);
 
     while let Some(msg) = next_msg.take() {
-        println!(
-            "Dispatching message: {:?}",
-            core::any::type_name::<A::Msg>()
-        );
         let change = app.update(msg);
 
         if let Some(key) = change.focus_key {
             internal_state.factory.set_focus_key(key);
-            println!("Focus key changed to {:?}", key);
         } else {
             internal_state
                 .factory
                 .set_focus_key(internal_state.factory.focus_key());
-            println!("Focus key unchanged");
         }
 
         next_msg = match change.effect {

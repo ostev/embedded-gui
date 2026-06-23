@@ -1,15 +1,20 @@
 use crate::position::Position;
 
+/// A width and height pair.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Size {
+    /// The width in pixels.
     pub width: u16,
+    /// The height in pixels.
     pub height: u16,
 }
 impl Size {
+    /// Creates a new `Size` with the given width and height.
     pub const fn new(width: u16, height: u16) -> Size {
         Size { width, height }
     }
 
+    /// Returns a `Size` with zero width and height.
     pub const fn zero() -> Size {
         Size {
             width: 0,

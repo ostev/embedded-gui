@@ -14,8 +14,11 @@ use crate::{
     view::{self, Children},
 };
 
+/// A component that fills its area with a solid color.
+/// Place widgets inside it to override their background colors.
 #[derive(Reactive)]
 pub struct Background<Color: PixelColor> {
+    /// The fill color.
     pub color: Signal<Color>,
 }
 

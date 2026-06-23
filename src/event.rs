@@ -1,7 +1,6 @@
 use core::cell::RefCell;
 
 use alloc::boxed::Box;
-use esp_println::println;
 use hashbrown::HashMap;
 
 use crate::interactive;

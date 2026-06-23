@@ -11,6 +11,11 @@ use syn::{
     token,
 };
 
+/// Derive macro for the [`Reactive`] trait.
+///
+/// Generates an implementation of `Reactive::has_changed()` that returns true
+/// if at least one of its constituent fields has changed. This macro does
+/// not support enums with empty variants
 #[proc_macro_derive(Reactive)]
 pub fn derive_reactive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -31,6 +36,7 @@ pub fn derive_reactive(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
     proc_macro::TokenStream::from(expanded)
 }
 
+/// Generates the expression used in the interior of [`derive_reactive`]
 fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
     match *data {
         syn::Data::Struct(ref data) => match data.fields {
@@ -107,9 +113,6 @@ fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
                         }
                     },
                     Fields::Unit => {
-                        // quote_spanned! { variant.span() =>
-                        //     #qualified_name => false,
-                        // }
                         Error::new(Span::mixed_site(), "Enums with empty variants cannot be reactive!")
                             .to_compile_error()
                             .into()
@@ -128,6 +131,12 @@ fn fields_have_changed(type_name: &Ident, data: &syn::Data) -> TokenStream {
     }
 }
 
+/// Derive macro for the [`State`] trait.
+///
+/// Generates an implementation of `State::mark_resolved()` that calls
+/// `mark_resolved()` on each field. Supports structs with named or
+/// unnamed fields.
+/// [`State`]: embedded_gui::app::State
 #[proc_macro_derive(State)]
 pub fn derive_state(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -185,20 +194,10 @@ fn mark_fields_resolved(data: &syn::Data) -> TokenStream {
     }
 }
 
-fn lowercase_first_letter(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        None => String::new(),
-        Some(f) => f.to_lowercase().collect::<String>() + c.as_str(),
-    }
-}
-
-// #[derive(FromMeta)]
-// #[darling(derive_syn_parse)]
-
+/// Represents a key-value pair in attribute macro parameters
 struct KeyValuePair {
     key: Ident,
-    eq_token: Token![=],
+    _eq_token: Token![=],
     value: Type,
 }
 
@@ -206,12 +205,13 @@ impl Parse for KeyValuePair {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(KeyValuePair {
             key: input.parse()?,
-            eq_token: input.parse()?,
+            _eq_token: input.parse()?,
             value: input.parse()?,
         })
     }
 }
 
+/// Represents a comma-separated series of key-value pairs in an attribute
 struct AttributeKeyValuePairs {
     pairs: Punctuated<KeyValuePair, Token![,]>,
 }
@@ -224,6 +224,8 @@ impl Parse for AttributeKeyValuePairs {
     }
 }
 
+/// Represents tha arguments that can be passed to the [`any_component`]
+/// attribute macro.
 struct AnyComponentArgs {
     target: Type,
     event: Type,
@@ -232,6 +234,8 @@ struct AnyComponentArgs {
     any_primitive: Type,
 }
 
+/// Represents tha arguments that can be passed to the [`any_primitive`]
+/// attribute macro.
 struct AnyPrimitiveArgs {
     target: Type,
 }
@@ -278,12 +282,14 @@ impl AnyComponentArgs {
     }
 }
 
+/// The properties of each enum variant that we care about
 struct EnumVariantInfo {
     qualified_name: TokenStream,
     unqualified_name: Ident,
     field_type: Type,
 }
 
+/// Convert an enum into a list of its variants
 fn collect_enum_variants(
     type_name: &Ident,
     data: &syn::Data,
@@ -334,6 +340,8 @@ fn build_match_interior(branches: Vec<TokenStream>) -> TokenStream {
     }
 }
 
+/// Transform the interior of each enum variant into an arena box pointer to the
+/// type inside.
 fn build_enum_variants(variants: &[EnumVariantInfo]) -> Vec<TokenStream> {
     variants
         .iter()
@@ -347,12 +355,13 @@ fn build_enum_variants(variants: &[EnumVariantInfo]) -> Vec<TokenStream> {
         .collect()
 }
 
+/// Generates all of the [`From`] conversion impls necessary for making type-erased primitives and
+/// components work.
 fn build_from_impls(
     impl_generics: &ImplGenerics,
     ty_generics: &TypeGenerics,
     where_clause: Option<&syn::WhereClause>,
     type_name: &Ident,
-    lifetime_generic: &LifetimeParam,
     variants: &[EnumVariantInfo],
     param_name: &Ident,
 ) -> Vec<TokenStream> {
@@ -372,6 +381,19 @@ fn build_from_impls(
         .collect()
 }
 
+/// Attribute macro that transforms a component enum into a type-erased
+/// component wrapper.
+///
+/// # Arguments
+///
+/// - `target` – the draw target type (default: `Display`)
+/// - `event` – the event type (default: `Event`)
+/// - `msg` – the message type (default: `Event`)
+/// - `focus_key` – the focus key type (default: `FocusKey`)
+/// - `any_primitive` – the primitive enum type (default: `AnyPrimitive<'a>`)
+///
+/// [`Component`]: embedded_gui::component::Component
+/// [`IntrinsicSize`]: embedded_gui::layout::IntrinsicSize
 #[proc_macro_attribute]
 pub fn any_component(
     attr: proc_macro::TokenStream,
@@ -384,8 +406,6 @@ pub fn any_component(
 
     let type_name = input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    let lifetime_generic: LifetimeParam = parse_quote!('a);
 
     let variants = match collect_enum_variants(&type_name, &input.data) {
         Ok(variants) => variants,
@@ -414,7 +434,6 @@ pub fn any_component(
         &ty_generics,
         where_clause,
         &type_name,
-        &lifetime_generic,
         &variants,
         &format_ident!("component"),
     );
@@ -427,26 +446,18 @@ pub fn any_component(
     let focus_key = &args.focus_key;
     let any_primitive = &args.any_primitive;
 
-    // let mut where_clause_with_any = input
-    //     .generics
-    //     .where_clause
-    //     .clone()
-    //     .unwrap_or_else(|| parse_quote!(where));
-    // where_clause_with_any.predicates;
-    // .push(parse_quote!(AnyPrimitive: ::embedded_gui::primitive::Primitive<#target>));
-
     let expanded = quote! {
         // #input
         enum #type_name #ty_generics #where_clause {
             #(#enum_variants),*
         }
 
-        impl #impl_generics ::embedded_gui::component::Component<#lifetime_generic, #target, #event, #msg, #focus_key, Self, #any_primitive> for #type_name #ty_generics #where_clause {
+        impl #impl_generics ::embedded_gui::component::Component<'a, #target, #event, #msg, #focus_key, Self, #any_primitive> for #type_name #ty_generics #where_clause {
             fn view(
                 &self,
                 v: &'a ::embedded_gui::view::Factory<#event, #msg, #focus_key>,
-                children: ::embedded_gui::view::Children<#lifetime_generic, #target, #event, #msg, #focus_key, Self, #any_primitive>,
-            ) -> ::embedded_gui::view::View<#lifetime_generic, #target, #event, #msg, #focus_key, Self, #any_primitive> {
+                children: ::embedded_gui::view::Children<'a, #target, #event, #msg, #focus_key, Self, #any_primitive>,
+            ) -> ::embedded_gui::view::View<'a, #target, #event, #msg, #focus_key, Self, #any_primitive> {
                 #view_interior
             }
         }
@@ -467,6 +478,11 @@ pub fn any_component(
     proc_macro::TokenStream::from(expanded)
 }
 
+/// Transforms an enum of primitives into a type-erased primitive wrapper.
+///
+/// # Arguments
+///
+/// - `target` – the draw target type (default: `Display`)
 #[proc_macro_attribute]
 pub fn any_primitive(
     attr: proc_macro::TokenStream,
@@ -479,8 +495,6 @@ pub fn any_primitive(
 
     let type_name = input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    let lifetime_generic: LifetimeParam = parse_quote!('a);
 
     let variants = match collect_enum_variants(&type_name, &input.data) {
         Ok(variants) => variants,
@@ -509,7 +523,6 @@ pub fn any_primitive(
         &ty_generics,
         where_clause,
         &type_name,
-        &lifetime_generic,
         &variants,
         &format_ident!("primitive"),
     );

@@ -1,10 +1,8 @@
-use core::{fmt::Debug, marker::PhantomData, mem::ManuallyDrop};
+use core::{fmt::Debug, marker::PhantomData};
 
 use alloc::boxed::Box;
 use bumpalo::Bump;
 use embedded_graphics::draw_target::DrawTarget;
-use esp_println::println;
-// use esp_println::println;
 
 use crate::{
     component::{Component, background::Background, group::Group},
@@ -18,6 +16,7 @@ use crate::{
     size::Size,
 };
 
+/// A boxed slice of child widgets, produced by components.
 pub struct Children<
     'a,
     T: DrawTarget,
@@ -45,6 +44,7 @@ impl<
     }
 }
 
+/// Represents either a [`Primitive`] or a [`Component`]
 enum ComplexWidgetVariant<
     'a,
     T: DrawTarget,
@@ -131,6 +131,7 @@ impl<
     }
 }
 
+/// Either a [`Primitive`] or a [`Component`]
 struct ComplexWidget<
     'a,
     T: DrawTarget,
@@ -160,6 +161,7 @@ impl<
     }
 }
 
+/// Represents a widget that can be interacted with.
 struct InteractiveWidget<
     'a,
     T: DrawTarget,
@@ -176,18 +178,7 @@ struct InteractiveWidget<
     phantom: PhantomData<(Event, Msg)>,
 }
 
-struct LayeredWidget<
-    'a,
-    T: DrawTarget,
-    Event,
-    Msg,
-    FocusKey: interactive::Key,
-    AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
-    AnyPrimitive: Primitive<T>,
-> {
-    layers: &'a [Widget<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>],
-}
-
+/// Internal type for widget variants, not exposed to the public API.
 enum WidgetVariant<
     'a,
     T: DrawTarget,
@@ -199,7 +190,6 @@ enum WidgetVariant<
 > {
     Complex(ComplexWidget<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>),
     Interactive(InteractiveWidget<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>),
-    // Layered(LayeredWidget<'a, T, Event, Msg, FocusKey>),
 }
 
 impl<
@@ -295,15 +285,16 @@ impl<
     ) -> Self {
         WidgetVariant::Interactive(InteractiveWidget {
             key,
-            // event_handler: Some(event::Handler {
-            //     handler: event_handler,
-            // }),
             contents,
             phantom: PhantomData,
         })
     }
 }
 
+/// A widget node in the view tree.
+///
+/// Widgets are either [`Complex`](WidgetVariant::Complex) (a component or primitive)
+/// or [`Interactive`](WidgetVariant::Interactive) (a focusable wrapper around another widget).
 pub struct Widget<
     'a,
     T: DrawTarget,
@@ -339,7 +330,13 @@ impl<
     }
 }
 
+/// The main builder for constructing view trees.
+///
+/// Holds a bump arena for allocations and a registry of event handlers
+/// keyed by focus key. All widgets, views, and children are created
+/// through this factory.
 pub struct Factory<Event, GlobalMsg, GlobalFocusKey: interactive::Key> {
+    /// The bump allocator used for all view allocations.
     pub bump: Bump,
 
     handler_registry: HandlerRegistry<GlobalFocusKey, Event, GlobalMsg>,
@@ -349,6 +346,7 @@ pub struct Factory<Event, GlobalMsg, GlobalFocusKey: interactive::Key> {
 }
 
 impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMsg, GlobalFocusKey> {
+    /// Creates a new factory with the given initial focus key.
     pub fn new(focus_key: GlobalFocusKey) -> Self {
         Self {
             bump: Bump::new(),
@@ -358,23 +356,28 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         }
     }
 
+    /// Returns the current focus key
     pub(crate) fn focus_key(&self) -> GlobalFocusKey {
         self.focus_key
     }
 
+    /// Updates the current focus key
     pub(crate) fn set_focus_key(&mut self, key: GlobalFocusKey) {
         self.previous_focus_key = Some(self.focus_key);
         self.focus_key = key;
     }
 
+    /// Has the focus key changed?
     pub(crate) fn has_focus_changed(&self) -> bool {
         Some(self.focus_key) != self.previous_focus_key
     }
 
+    /// Dispatch an event to the focused interactive widget.
     pub(crate) fn dispatch(&self, event: Event) -> Option<GlobalMsg> {
         self.handler_registry.dispatch(&self.focus_key, event)
     }
 
+    /// Creates an interactive widget that can receive focus and handle events.
     pub fn interactive<
         'a,
         T: DrawTarget,
@@ -415,6 +418,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         ))
     }
 
+    /// Creates a widget from a component with the given sizing and children.
     pub fn component<
         'a,
         const N: usize,
@@ -436,6 +440,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         ))
     }
 
+    /// Creates a widget from a component with pre-existing children.
     pub fn component_ref<
         'a,
         T: DrawTarget,
@@ -456,6 +461,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         ))
     }
 
+    /// Creates a leaf widget from a primitive.
     pub fn primitive<
         'a,
         T: DrawTarget,
@@ -473,6 +479,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         Widget::new(WidgetVariant::primitive(&self.bump, primitive, sizing))
     }
 
+    /// Creates a [`View`] that arranges children in the given direction.
     pub fn view<
         'a,
         const N: usize,
@@ -494,6 +501,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         }
     }
 
+    /// Creates a [`View`] from pre-existing children.
     pub fn view_ref<
         'a,
         T: DrawTarget,
@@ -514,6 +522,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         }
     }
 
+    /// Creates a fill-sized spacer widget.
     pub fn spacer<
         'a,
         T: DrawTarget,
@@ -528,6 +537,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         self.primitive(Sizing::Fill, Spacer::zero())
     }
 
+    /// Creates a fill-sized group widget.
     pub fn group_fill<
         'a,
         const N: usize,
@@ -546,6 +556,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         self.component(Sizing::Fill, component, children)
     }
 
+    /// Creates a group widget with the given sizing.
     pub fn group<
         'a,
         const N: usize,
@@ -565,6 +576,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         self.component(sizing, component, children)
     }
 
+    /// Creates a group widget from pre-existing children.
     pub fn group_ref<
         'a,
         T: DrawTarget,
@@ -583,6 +595,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         self.component_ref(sizing, component, children)
     }
 
+    /// Centers a widget horizontally or vertically using fill spacers.
     pub fn centered<
         'a,
         T: DrawTarget,
@@ -600,6 +613,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         self.group_fill(direction, [self.spacer(), widget, self.spacer()])
     }
 
+    /// Centers a widget both horizontally and vertically.
     pub fn middle<
         'a,
         T: DrawTarget,
@@ -618,6 +632,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
             self.centered(Direction::Horizontal, widget),
         )
     }
+    /// Creates a background-colored group widget.
     pub fn background<
         'a,
         T: DrawTarget,
@@ -637,6 +652,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         self.component(sizing, Background { color }, children)
     }
 
+    /// Creates a background-colored group widget from pre-existing children.
     pub fn background_ref<
         'a,
         T: DrawTarget,
@@ -657,6 +673,8 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
 }
 
 /// Represents a collection of widgets laid out in a set direction.
+///
+/// A `View` is the result of rendering a [`Component`].
 pub struct View<
     'a,
     T: DrawTarget,
@@ -670,6 +688,8 @@ pub struct View<
         ViewInternals<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive, UnsizedViewStage>,
 }
 
+/// Internal type for views not exposed to public API. It can be in one of two stages: unsized
+/// (freshly built) and sized (after layout).
 struct ViewInternals<
     'a,
     T: DrawTarget,
@@ -688,6 +708,8 @@ struct ViewInternals<
     phantom: PhantomData<Stage>,
 }
 
+// Basically these act as type-level enums:
+
 struct UnsizedViewStage {}
 struct SizedViewStage {}
 
@@ -696,6 +718,7 @@ trait ViewProcessingStage {}
 impl ViewProcessingStage for UnsizedViewStage {}
 impl ViewProcessingStage for SizedViewStage {}
 
+/// Return a function to reduce the available fill space in the specified direction
 fn reduce_fill_space(direction: Direction) -> impl Fn(Size, Size) -> Size {
     match direction {
         Direction::Horizontal => |fill_space: Size, size: Size| {
@@ -712,6 +735,8 @@ fn reduce_fill_space(direction: Direction) -> impl Fn(Size, Size) -> Size {
         },
     }
 }
+
+/// Return a function to reduce the available fill space in the specified with a constraint.
 fn reduce_fill_space_constrained(direction: Direction) -> impl Fn(Size, u16) -> Size {
     match direction {
         Direction::Horizontal => |fill_space: Size, constraint: u16| {
@@ -729,6 +754,8 @@ fn reduce_fill_space_constrained(direction: Direction) -> impl Fn(Size, u16) -> 
     }
 }
 
+/// Returns a function to adjust the current position to after the widget being drawn
+/// in the specified direction.
 fn adjust_position(direction: Direction) -> impl Fn(Position, Size) -> Position {
     match direction {
         Direction::Horizontal => {
@@ -747,6 +774,7 @@ where
     AnyPrimitive: Primitive<T>,
     T::Color: Debug,
 {
+    /// Sets an optional background color for this view's rendering area.
     pub fn with_background(mut self, background: T::Color) -> Self {
         self.internals.background = Some(background);
 
@@ -767,8 +795,8 @@ where
         let reduce_fill_space = reduce_fill_space(self.internals.direction);
         let reduce_fill_space_constrained = reduce_fill_space_constrained(self.internals.direction);
 
-        /// This function is called in a recursive fold to calculate the size of a widget,
-        /// mutating the original widget to store this information.
+        /// Called in a recursive fold to calculate the size of each widget. This function
+        /// mutates the original widget to store this information.
         fn size_widget<
             'a,
             T: DrawTarget,
@@ -794,7 +822,6 @@ where
                 AnyPrimitive,
             >,
         ) -> (u16, Size) {
-            // println!("Size!!!!");
             let size_complex = |complex: &mut ComplexWidget<
                 'a,
                 T,
@@ -886,7 +913,7 @@ where
         )
     }
 
-    pub(crate) unsafe fn render(
+    pub(crate) fn render(
         self,
         factory: &'a Factory<Event, Msg, FocusKey>,
         origin: Position,
@@ -895,10 +922,6 @@ where
         background_color: T::Color,
         is_init: bool,
     ) -> Result<(), T::Error> {
-        // println!(
-        //     "available spacer of {:?} at point {:?}",
-        //     available_space, origin
-        // );
         let (mut sized_view, size_per_widget_option) =
             self.compute_size_per_widget(&factory.bump, available_space, factory.focus_key);
         let size_per_widget = size_per_widget_option.unwrap_or(Size::zero());
@@ -928,18 +951,15 @@ where
             position: Position,
         ) -> Position {
             match variant {
-                WidgetVariant::Complex(complex) => {
-                    // println!("Complex size {:?}", complex.size);
-                    match complex.sizing {
-                        Sizing::Intrinsic => adjust_position(position, complex.size),
-                        Sizing::Fill => {
-                            complex.size = size_per_widget;
+                WidgetVariant::Complex(complex) => match complex.sizing {
+                    Sizing::Intrinsic => adjust_position(position, complex.size),
+                    Sizing::Fill => {
+                        complex.size = size_per_widget;
 
-                            adjust_position(position, complex.size)
-                        }
-                        Sizing::Constrained(_) => adjust_position(position, complex.size),
+                        adjust_position(position, complex.size)
                     }
-                }
+                    Sizing::Constrained(_) => adjust_position(position, complex.size),
+                },
                 WidgetVariant::Interactive(interactive) => update_position(
                     &mut interactive.contents,
                     adjust_position,
@@ -964,26 +984,21 @@ where
             let complex = widget.variant.complex();
 
             if is_init || has_changed {
-                // println!("Widget has changed!");
+                // The widget's change, so we'll re-render it!
                 match complex.inner {
                     ComplexWidgetVariant::Component(component, children) => {
                         let view = component.view(factory, children);
 
-                        // Safety: child views are built from the same factory bump and live
-                        // for the duration of this render pass.
-                        unsafe {
-                            view.render(
-                                factory,
-                                origin + position,
-                                complex.size,
-                                target,
-                                sized_view.background.unwrap_or(background_color),
-                                is_init,
-                            )?
-                        };
+                        view.render(
+                            factory,
+                            origin + position,
+                            complex.size,
+                            target,
+                            sized_view.background.unwrap_or(background_color),
+                            is_init,
+                        )?;
                     }
                     ComplexWidgetVariant::Primitive(primitive) => {
-                        // println!("Primitive!");
                         match LocalTarget::try_new(target, origin + position, complex.size) {
                             Some(mut local_target) => {
                                 local_target

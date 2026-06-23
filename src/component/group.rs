@@ -11,13 +11,20 @@ use crate::{
     view::{self, Children},
 };
 
+/// A layout component that arranges children in a horizontal or vertical stack.
+///
+/// The `direction` signal controls whether children are laid out left-to-right
+/// or top-to-bottom.
 #[derive(Reactive)]
 pub struct Group {
+    /// The direction children are laid out in.
     pub direction: Signal<Direction>,
+    /// The size of this group component.
     pub size: Signal<Size>,
 }
 
 impl Group {
+    /// Creates a `Group` with zero size (intrinsic sizing will be used).
     pub fn zero(direction: Signal<Direction>) -> Self {
         Self {
             size: Signal::constant(Size::zero()),

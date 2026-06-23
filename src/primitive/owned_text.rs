@@ -16,9 +16,14 @@ use crate::{
     size::Size,
 };
 
+/// A text primitive that owns its content in a fixed-capacity heapless `String`.
+///
+/// Use this when you need the text to live independently of the app state.
 #[derive(Reactive)]
 pub struct OwnedText<Color: PixelColor, const N: usize> {
+    /// The text content (owned by the primitive).
     pub content: Signal<heapless::String<N>>,
+    /// The font style used to render the text.
     pub font_style: Signal<MonoTextStyle<'static, Color>>,
 }
 

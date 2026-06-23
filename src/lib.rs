@@ -1,3 +1,24 @@
+//! A reactive GUI framework for embedded systems.
+//!
+//! `embedded-gui` is built on top of [`embedded-graphics`] and follows an
+//! Elm-inspired Model-View-Update architecture. It is designed to run in
+//! `#![no_std]` environments such as microcontrollers.
+//!
+//! # Important types
+//!
+//! - **App** – the top-level trait that defines your application's state,
+//!   update logic, and view hierarchy.
+//! - **Component** – a reusable widget that produces a `View` subtree.
+//! - **Primitive** – a widget that is drawn directly to the screen
+//! - **Source** – a reactive wrapper that tracks whether a value has changed,
+//!   enabling incremental rendering.
+//! - **Factory** – a builder that constructs the view tree.
+//!
+//! # Cargo Features
+//!
+//! - `clipping` – enables pixel-level bounds checking when drawing
+//!   (disabled by default for performance).
+
 #![no_std]
 #![feature(allocator_api)]
 
@@ -5,7 +26,6 @@ extern crate alloc;
 extern crate self as embedded_gui;
 
 pub mod app;
-pub mod background;
 pub mod component;
 pub mod draw;
 pub mod effect;
@@ -17,23 +37,3 @@ pub mod primitive;
 pub mod signal;
 pub mod size;
 pub mod view;
-
-// macro_rules! any_component {
-//     (components $name:ident {$($variant:ident => $component:ty),+}) => {
-//         impl<'a> $crate::signal::Reactive for $name<'a> {
-//             fn has_changed(&self) -> bool {
-//                 match self {
-//                     $($variant(component) => component.has_changed()),+
-//                 }
-//             }
-//         }
-
-//         impl<'a> $crate::component::Component for $name<'a> {
-//             fn has_changed(&self) -> bool {
-//                 match self {
-//                     $($variant(component) => component.has_changed()),+
-//                 }
-//             }
-//         }
-//     };
-// }

@@ -9,10 +9,17 @@ pub use embedded_gui_macros::Reactive;
 
 use crate::app::State;
 
+/// Trait for types that can report whether their value has changed.
+///
+/// Used by the reactive system to determine which parts of the UI need
+/// to be re-rendered each frame.
 pub trait Reactive {
+    /// Returns `true` if the value has been modified since the last
+    /// call to [`State::mark_resolved`].
     fn has_changed(&self) -> bool;
 }
 
+/// Helper macro for common trait impls
 macro_rules! reactive_impl {
     ($t:ty) => {
         impl<'a, T> Reactive for $t
@@ -44,6 +51,21 @@ where
     }
 }
 
+/// A mutable reactive value that tracks whether it has been modified.
+///
+/// Call [`Source::set`] or [`Source::update`] to mutate the value. You
+/// can mark the change as being resolved by calling [`State::mark_resolved`],
+/// but typically the only thing that should do this is the `embedded-gui`
+/// runtime.
+///
+/// # Example
+///
+/// ```
+/// let mut source = Source::new(42);
+/// assert!(!source.has_changed());
+/// source.set(100);
+/// assert!(source.has_changed());
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Source<T> {
     value: T,
@@ -51,6 +73,8 @@ pub struct Source<T> {
 }
 
 impl<T> Source<T> {
+    /// Creates a new [`Source`] with the given initial value. The change
+    /// flag is initially `false`.
     #[inline]
     pub fn new(value: T) -> Self {
         Self {
@@ -67,18 +91,22 @@ impl<T> Source<T> {
         Self { value, has_changed }
     }
 
+    /// Replaces the stored value with `new_value` and marks the source as changed.
     #[inline]
     pub fn set(&mut self, new_value: T) {
         self.value = new_value;
         self.mark_changed();
     }
 
+    /// Replaces the stored value with the result of `updater` and marks the source as changed.
     #[inline]
     pub fn set_with(&mut self, updater: impl FnOnce(&T) -> T) {
         self.value = updater(&self.value);
         self.mark_changed();
     }
 
+    /// Mutates the stored value in place via `updater` and marks the source as changed.
+    /// Returns the value returned by `updater`.
     #[inline]
     pub fn update<U>(&mut self, updater: impl FnOnce(&mut T) -> U) -> U {
         let output = updater(&mut self.value);
@@ -92,6 +120,7 @@ impl<T> Source<T> {
         self.has_changed = true;
     }
 
+    /// Returns a [`SignalRef`] that borrows the current value of this source.
     #[inline(always)]
     pub fn signal_ref<'a>(&'a self) -> SignalRef<'a, T> {
         SignalRef::new(SignalRefVariant::Borrowed(Source {
@@ -100,6 +129,8 @@ impl<T> Source<T> {
         }))
     }
 
+    /// Transforms the value by consuming `self` and applying `f`,
+    /// preserving the change flag.
     pub fn map<U>(self, f: impl Fn(T) -> U) -> Source<U> {
         Source {
             value: f(self.value),
@@ -107,6 +138,7 @@ impl<T> Source<T> {
         }
     }
 
+    /// Transforms the value by reference, preserving the change flag.
     pub fn map_ref<U>(&self, f: impl Fn(&T) -> U) -> Source<U> {
         Source {
             value: f(&self.value),
@@ -116,6 +148,8 @@ impl<T> Source<T> {
 }
 
 impl<'a, T> Source<Option<T>> {
+    /// Returns a [`SignalRef`] to the inner value if this source contains
+    /// `Some`, or `None` otherwise.
     pub fn option_signal_ref(&'a self) -> Option<SignalRef<'a, T>> {
         self.value.as_ref().map(|value| {
             SignalRef::new(SignalRefVariant::Borrowed(Source {
@@ -127,6 +161,7 @@ impl<'a, T> Source<Option<T>> {
 }
 
 impl<T: Copy> Source<T> {
+    /// Returns a [`Signal`] (a copy-only reactive wrapper) for this source.
     #[inline(always)]
     pub fn signal(&self) -> Signal<T> {
         Signal { source: *self }
@@ -156,12 +191,15 @@ impl<T> Deref for Source<T> {
     }
 }
 
+/// An immutable copy of a reactive value. Created from a [`Source`] via
+/// [`Source::signal`]. Useful for passing snapshot values into the view tree.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Signal<T> {
     source: Source<T>,
 }
 
 impl<T> Signal<T> {
+    /// Creates a [`Signal`] that never reports as changed.
     pub fn constant(value: T) -> Signal<T> {
         Signal {
             source: Source {
@@ -171,6 +209,7 @@ impl<T> Signal<T> {
         }
     }
 
+    /// Transforms the value by reference, preserving the change flag.
     pub fn map<U>(&self, f: impl Fn(&T) -> U) -> Signal<U> {
         Signal {
             source: Source {
@@ -180,6 +219,8 @@ impl<T> Signal<T> {
         }
     }
 
+    /// Applies `f` to the value and stores the result in a bump-allocated
+    /// [`SignalRef`], preserving the change flag.
     pub fn map_to_owned_ref<'a, U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
         SignalRef::new(SignalRefVariant::Owned(Source {
             value: Rc::new_in(f(&self.source.value), bump),
@@ -222,12 +263,18 @@ impl<'a, T> Clone for SignalRefVariant<'a, T> {
     }
 }
 
+/// A reactive reference to a value, either borrowed or owned (bump-allocated).
+///
+/// `SignalRef` is the primary way to pass data into the view tree without
+/// copying. It can reference a field on the app state (borrowed) or own a
+/// heap-allocated copy (owned).
 #[derive(PartialEq, Eq, Debug)]
 pub struct SignalRef<'a, T> {
     variant: SignalRefVariant<'a, T>,
 }
 
 impl<'a, T> SignalRef<'a, T> {
+    /// Creates a [`SignalRef`] pointing to a static value that never changes.
     #[inline]
     pub fn constant(value: &'static T) -> Self {
         Self::new(SignalRefVariant::Borrowed(Source {
@@ -241,6 +288,7 @@ impl<'a, T> SignalRef<'a, T> {
         Self { variant }
     }
 
+    /// Allocates the constant in the provided arena.
     #[inline(always)]
     pub fn owned_constant(value: T, bump: &'a Bump) -> Self {
         SignalRef::new(SignalRefVariant::Owned(Source {
@@ -249,6 +297,8 @@ impl<'a, T> SignalRef<'a, T> {
         }))
     }
 
+    /// Transforms the value by-reference and stores the result in the bump,
+    /// returning a new owned [`SignalRef`].
     pub fn map_ref<U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
         SignalRef::new(match &self.variant {
             SignalRefVariant::Owned(signal) => SignalRefVariant::Owned(Source {
@@ -262,6 +312,7 @@ impl<'a, T> SignalRef<'a, T> {
         })
     }
 
+    /// Transforms the value by-reference into a new [`Signal`] (an owned copy).
     pub fn map<U>(&self, f: impl Fn(&T) -> U) -> Signal<U> {
         Signal {
             source: match &self.variant {
@@ -277,6 +328,7 @@ impl<'a, T> SignalRef<'a, T> {
         }
     }
 
+    /// Returns a [`Signal`] that borrows from this `SignalRef`.
     pub fn signal<'b>(&'b self) -> Signal<&'b T> {
         match &self.variant {
             SignalRefVariant::Owned(signal) => Signal {
@@ -299,6 +351,8 @@ impl<'a, T> SignalRef<'a, Option<T>>
 where
     T: Clone,
 {
+    /// If this `SignalRef` wraps `Some(value)`, returns a new `SignalRef`
+    /// to the inner value. Otherwise returns `None`.
     pub fn to_option_ref(&self, bump: &'a Bump) -> Option<SignalRef<'a, T>> {
         let variant = match &self.variant {
             SignalRefVariant::Borrowed(source) => source.value.as_ref().map(|value| {

@@ -3,49 +3,16 @@ use core::fmt::Debug;
 use embedded_graphics::Pixel;
 use embedded_graphics::prelude::{Dimensions, DrawTarget, OriginDimensions, PixelColor, Point};
 use embedded_graphics::primitives::Rectangle;
-use esp_println::println;
 
 use crate::position::Position;
 use crate::size::Size;
 
-// pub(crate) struct Framebuffer<Color: PixelColor> {
-//     buffer: Vec<Color>,
-//     width: usize,
-//     height: usize,
-// }
-
-// impl<Color: PixelColor> Framebuffer<Color> {
-//     pub fn new(background: Color, width: usize, height: usize) -> Self {
-//         Self {
-//             buffer: vec![background; width * height],
-//             width,
-//             height,
-//         }
-//     }
-
-//     const fn index(&self, x: usize, y: usize) -> usize {
-//         x + y * self.width
-//     }
-
-//     pub fn blit<T: DrawTarget<Color = Color>>(&self, target: &mut T) -> Result<(), T::Error> {
-//         self.blit_with(target, |color| *color)
-//     }
-
-//     pub fn blit_with<T: DrawTarget<Color = TargetColor>, TargetColor: PixelColor>(
-//         &self,
-//         target: &mut T,
-//         f: impl FnMut(&Color) -> TargetColor,
-//     ) -> Result<(), T::Error> {
-//         target.fill_contiguous(
-//             &Rectangle::new(
-//                 Point::zero(),
-//                 embedded_graphics::geometry::Size::new(self.width as u32, self.height as u32),
-//             ),
-//             self.buffer.iter().map(f),
-//         )
-//     }
-// }
-
+/// A draw target that offsets and optionally clips drawing to a subregion.
+///
+/// Wraps an underlying [`DrawTarget`] and translates all pixel coordinates
+/// by the given `position`, so that child primitives can draw relative to
+/// their own origin. When the `clipping` feature is enabled, pixels outside
+/// the subregion are discarded.
 pub struct LocalTarget<'a, T: DrawTarget> {
     target: &'a mut T,
     position: Position,
@@ -71,6 +38,7 @@ impl<'a, T: DrawTarget> LocalTarget<'a, T> {
     // self.target.buffer[index] = color;
     // }
 
+    /// Returns the size of this local draw target.
     pub fn size(&self) -> Size {
         self.size
     }

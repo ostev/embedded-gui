@@ -1,6 +1,5 @@
 use core::fmt::Debug;
 
-use alloc::{borrow::Cow, string::String};
 use embedded_graphics::{
     Drawable,
     draw_target::DrawTarget,
@@ -8,8 +7,6 @@ use embedded_graphics::{
     prelude::{PixelColor, Point},
     text::{Alignment, TextStyleBuilder},
 };
-use esp_println::println;
-// use esp_println::println;
 
 use crate::{
     layout::IntrinsicSize,
@@ -18,9 +15,15 @@ use crate::{
     size::Size,
 };
 
+/// A text primitive that borrows its content.
+///
+/// Use this when the displayed text is a reference to app state and does
+/// not need to be owned.
 #[derive(Reactive)]
 pub struct Text<'model, Color: PixelColor, S: AsRef<str>> {
+    /// The text content (borrowed from app state).
     pub content: SignalRef<'model, S>,
+    /// The font style used to render the text.
     pub font_style: Signal<MonoTextStyle<'static, Color>>,
 }
 

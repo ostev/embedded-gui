@@ -1,28 +1,3 @@
-[package]
-name = "embedded-gui"
-version = "0.0.23"
-edition = "2024"
-
-[dependencies]
-embedded-gui-macros = { path = "embedded-gui-macros" }
-
-bumpalo = { version = "3.20", features = [
-    "boxed",
-    "collections",
-    "allocator_api",
-] }
-hashbrown = "0.17"
-embedded-graphics = "0.8"
-heapless = "0.9.3"
-
-
-[dev-dependencies]
-embedded-graphics-simulator = "0.8.0"
-pollster = { version = "0.4.0", features = ["macro"] }
-
 [workspace]
-members = ["embedded-gui-macros"]
-
-[features]
-default = ["clipping"]
-clipping = []
+resolver = "3"
+members = ["crates/embedded-gui-macros", "crates/embedded-gui"]

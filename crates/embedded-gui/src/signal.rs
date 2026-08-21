@@ -1,10 +1,7 @@
-use core::{
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-};
+use core::{fmt::Debug, ops::Deref};
 
 use alloc::{borrow::Cow, rc::Rc};
-use bumpalo::{Bump, boxed::Box};
+use bumpalo::Bump;
 pub use embedded_gui_macros::Reactive;
 
 use crate::app::State;
@@ -275,7 +272,6 @@ pub struct SignalRef<'a, T> {
 
 impl<'a, T> SignalRef<'a, T> {
     /// Creates a [`SignalRef`] pointing to a static value that never changes.
-    #[inline]
     pub fn constant(value: &'static T) -> Self {
         Self::new(SignalRefVariant::Borrowed(Source {
             value,
@@ -283,13 +279,11 @@ impl<'a, T> SignalRef<'a, T> {
         }))
     }
 
-    #[inline(always)]
     fn new(variant: SignalRefVariant<'a, T>) -> Self {
         Self { variant }
     }
 
     /// Allocates the constant in the provided arena.
-    #[inline(always)]
     pub fn owned_constant(value: T, bump: &'a Bump) -> Self {
         SignalRef::new(SignalRefVariant::Owned(Source {
             value: Rc::new_in(value, bump),

@@ -41,7 +41,7 @@ pub struct Text<'model, Color: PixelColor, S: AsRef<str>> {
 impl<'model, 'a, Color: PixelColor + Debug, T: DrawTarget<Color = Color>, S: AsRef<str>>
     Primitive<T> for Text<'model, Color, S>
 {
-    fn draw(self, target: &mut crate::draw::LocalTarget<T>) -> Signal<'a, Result<(), T::Error>> {
+    fn draw(self, target: &mut crate::draw::LocalTarget<T>) -> Result<(), T::Error> {
         let text_style = TextStyleBuilder::new()
             .alignment(Alignment::Left)
             .baseline(embedded_graphics::text::Baseline::Top)

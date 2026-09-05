@@ -1,6 +1,9 @@
-use core::{fmt::Debug, ops::Deref};
+use core::{
+    fmt::Debug,
+    ops::{ControlFlow, Deref, FromResidual, Residual, Try},
+};
 
-use alloc::{borrow::Cow, rc::Rc};
+use alloc::{borrow::Cow, boxed::Box, rc::Rc};
 use bumpalo::Bump;
 pub use embedded_gui_macros::Reactive;
 
@@ -63,7 +66,7 @@ where
 /// source.set(100);
 /// assert!(source.has_changed());
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Source<T> {
     value: T,
     has_changed: bool,
@@ -80,13 +83,13 @@ impl<T> Source<T> {
         }
     }
 
-    /// Creates a new [`Source`] with a custom initial change state. Make
-    /// sure that this `has_changed` state is correct, otherwise your application
-    /// will misbehave.
-    #[inline]
-    pub(crate) fn custom(value: T, has_changed: bool) -> Self {
-        Self { value, has_changed }
-    }
+    // /// Creates a new [`Source`] with a custom initial change state. Make
+    // /// sure that this `has_changed` state is correct, otherwise your application
+    // /// will misbehave.
+    // #[inline]
+    // pub(crate) fn custom(value: T, has_changed: bool) -> Self {
+    //     Self { value, has_changed }
+    // }
 
     /// Replaces the stored value with `new_value` and marks the source as changed.
     #[inline]
@@ -117,13 +120,11 @@ impl<T> Source<T> {
         self.has_changed = true;
     }
 
-    /// Returns a [`SignalRef`] that borrows the current value of this source.
-    #[inline(always)]
-    pub fn signal_ref<'a>(&'a self) -> SignalRef<'a, T> {
-        SignalRef::new(SignalRefVariant::Borrowed(Source {
+    pub fn signal<'a>(&'a self) -> Signal<'a, T> {
+        Signal::new(SignalVariant::Borrowed {
             value: &self.value,
             has_changed: self.has_changed,
-        }))
+        })
     }
 
     /// Transforms the value by consuming `self` and applying `f`,
@@ -144,26 +145,18 @@ impl<T> Source<T> {
     }
 }
 
-impl<'a, T> Source<Option<T>> {
-    /// Returns a [`SignalRef`] to the inner value if this source contains
-    /// `Some`, or `None` otherwise.
-    pub fn option_signal_ref(&'a self) -> Option<SignalRef<'a, T>> {
-        self.value.as_ref().map(|value| {
-            SignalRef::new(SignalRefVariant::Borrowed(Source {
-                value,
-                has_changed: self.has_changed,
-            }))
-        })
-    }
-}
-
-impl<T: Copy> Source<T> {
-    /// Returns a [`Signal`] (a copy-only reactive wrapper) for this source.
-    #[inline(always)]
-    pub fn signal(&self) -> Signal<T> {
-        Signal { source: *self }
-    }
-}
+// impl<'a, T> Source<Option<T>> {
+//     /// Returns a [`SignalRef`] to the inner value if this source contains
+//     /// `Some`, or `None` otherwise.
+//     pub fn option_signal_ref(&'a self) -> Option<Signal<'a, T>> {
+//         self.value.as_ref().map(|value| {
+//             Signal::new(SignalVariant::Borrowed { value, has_changed: () }Source {
+//                 value,
+//                 has_changed: self.has_changed,
+//             }))
+//         })
+//     }
+// }
 
 impl<T> State for Source<T> {
     #[inline(always)]
@@ -188,211 +181,147 @@ impl<T> Deref for Source<T> {
     }
 }
 
-/// An immutable copy of a reactive value. Created from a [`Source`] via
-/// [`Source::signal`]. Useful for passing snapshot values into the view tree.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Signal<T> {
-    source: Source<T>,
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
+pub struct Signal<'a, T> {
+    variant: SignalVariant<'a, T>,
 }
 
-impl<T> Signal<T> {
-    /// Creates a [`Signal`] that never reports as changed.
-    pub fn constant(value: T) -> Signal<T> {
-        Signal {
-            source: Source {
-                value,
-                has_changed: false,
-            },
-        }
-    }
-
-    /// Transforms the value by reference, preserving the change flag.
-    pub fn map<U>(&self, f: impl Fn(&T) -> U) -> Signal<U> {
-        Signal {
-            source: Source {
-                value: f(&self.source.value),
-                has_changed: self.source.has_changed,
-            },
-        }
-    }
-
-    /// Applies `f` to the value and stores the result in a bump-allocated
-    /// [`SignalRef`], preserving the change flag.
-    pub fn map_to_owned_ref<'a, U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
-        SignalRef::new(SignalRefVariant::Owned(Source {
-            value: Rc::new_in(f(&self.source.value), bump),
-            has_changed: self.source.has_changed,
-        }))
-    }
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
+enum SignalVariant<'a, T> {
+    Owned(Source<T>),
+    Borrowed { value: &'a T, has_changed: bool },
 }
 
-impl<T> Reactive for Signal<T> {
-    #[inline]
-    fn has_changed(&self) -> bool {
-        self.source.has_changed
-    }
-}
-
-impl<T> Deref for Signal<T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.source.value
-    }
-}
-
-#[derive(PartialEq, Eq, Debug)]
-enum SignalRefVariant<'a, T> {
-    Owned(Source<Rc<T, &'a Bump>>),
-    Borrowed(Source<&'a T>),
-}
-
-impl<'a, T> Clone for SignalRefVariant<'a, T> {
-    fn clone(&self) -> Self {
-        match self {
-            SignalRefVariant::Owned(source) => SignalRefVariant::Owned(Source {
-                value: source.value.clone(),
-                has_changed: source.has_changed,
-            }),
-            SignalRefVariant::Borrowed(source) => SignalRefVariant::Borrowed(*source),
-        }
-    }
-}
-
-/// A reactive reference to a value, either borrowed or owned (bump-allocated).
-///
-/// `SignalRef` is the primary way to pass data into the view tree without
-/// copying. It can reference a field on the app state (borrowed) or own a
-/// heap-allocated copy (owned).
-#[derive(PartialEq, Eq, Debug)]
-pub struct SignalRef<'a, T> {
-    variant: SignalRefVariant<'a, T>,
-}
-
-impl<'a, T> SignalRef<'a, T> {
-    /// Creates a [`SignalRef`] pointing to a static value that never changes.
+impl<'a, T> Signal<'a, T> {
     pub fn constant(value: &'static T) -> Self {
-        Self::new(SignalRefVariant::Borrowed(Source {
+        Self::new(SignalVariant::Borrowed {
+            value,
+            has_changed: false,
+        })
+    }
+
+    fn new(variant: SignalVariant<'a, T>) -> Self {
+        Self { variant }
+    }
+
+    pub fn owned_constant(value: T) -> Self {
+        Signal::new(SignalVariant::Owned(Source {
             value,
             has_changed: false,
         }))
     }
 
-    fn new(variant: SignalRefVariant<'a, T>) -> Self {
-        Self { variant }
-    }
-
-    /// Allocates the constant in the provided arena.
-    pub fn owned_constant(value: T, bump: &'a Bump) -> Self {
-        SignalRef::new(SignalRefVariant::Owned(Source {
-            value: Rc::new_in(value, bump),
-            has_changed: false,
+    pub fn map<'b, 'c, U>(&'b self, f: impl Fn(&T) -> U) -> Signal<'c, U> {
+        Signal::new(SignalVariant::Owned(match &self.variant {
+            SignalVariant::Owned(source) => Source {
+                value: f(&source.value),
+                has_changed: source.has_changed,
+            },
+            SignalVariant::Borrowed { value, has_changed } => Source {
+                value: f(value),
+                has_changed: *has_changed,
+            },
         }))
-    }
-
-    /// Transforms the value by-reference and stores the result in the bump,
-    /// returning a new owned [`SignalRef`].
-    pub fn map_ref<U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
-        SignalRef::new(match &self.variant {
-            SignalRefVariant::Owned(signal) => SignalRefVariant::Owned(Source {
-                value: Rc::new_in(f(&signal.value), bump),
-                has_changed: signal.has_changed,
-            }),
-            SignalRefVariant::Borrowed(signal) => SignalRefVariant::Owned(Source {
-                value: Rc::new_in(f(&signal.value), bump),
-                has_changed: signal.has_changed,
-            }),
-        })
-    }
-
-    /// Transforms the value by-reference into a new [`Signal`] (an owned copy).
-    pub fn map<U>(&self, f: impl Fn(&T) -> U) -> Signal<U> {
-        Signal {
-            source: match &self.variant {
-                SignalRefVariant::Owned(signal) => Source {
-                    value: f(&signal.value),
-                    has_changed: signal.has_changed,
-                },
-                SignalRefVariant::Borrowed(signal) => Source {
-                    value: f(&signal.value),
-                    has_changed: signal.has_changed,
-                },
-            },
-        }
-    }
-
-    /// Returns a [`Signal`] that borrows from this `SignalRef`.
-    pub fn signal<'b>(&'b self) -> Signal<&'b T> {
-        match &self.variant {
-            SignalRefVariant::Owned(signal) => Signal {
-                source: Source {
-                    value: signal.value.as_ref(),
-                    has_changed: signal.has_changed,
-                },
-            },
-            SignalRefVariant::Borrowed(signal) => Signal {
-                source: Source {
-                    value: &signal.value,
-                    has_changed: signal.has_changed,
-                },
-            },
-        }
     }
 }
 
-impl<'a, T> SignalRef<'a, Option<T>>
+impl<'a, T> Signal<'a, T>
 where
     T: Clone,
 {
-    /// If this `SignalRef` wraps `Some(value)`, returns a new `SignalRef`
-    /// to the inner value. Otherwise returns `None`.
-    pub fn to_option_ref(&self, bump: &'a Bump) -> Option<SignalRef<'a, T>> {
-        let variant = match &self.variant {
-            SignalRefVariant::Borrowed(source) => source.value.as_ref().map(|value| {
-                SignalRefVariant::Borrowed(Source {
-                    value,
-                    has_changed: source.has_changed,
-                })
-            }),
-            SignalRefVariant::Owned(source) => Option::as_ref(&source.value).map(|value| {
-                SignalRefVariant::Owned(Source {
-                    value: Rc::new_in(value.clone(), bump),
-                    has_changed: source.has_changed,
-                })
-            }),
-        };
-
-        variant.map(SignalRef::new)
+    pub fn map_clone<U>(self, f: impl Fn(T) -> U) -> Signal<'a, U> {
+        Signal::new(SignalVariant::Owned(match self.variant {
+            SignalVariant::Owned(source) => Source {
+                value: f(source.value),
+                has_changed: source.has_changed,
+            },
+            SignalVariant::Borrowed { value, has_changed } => Source {
+                value: f(value.clone()),
+                has_changed: has_changed,
+            },
+        }))
     }
 }
 
-impl<'a, T> Reactive for SignalRef<'a, T> {
+impl<'a, T> Signal<'a, Option<T>>
+where
+    T: Clone,
+{
+    // /// If this `SignalRef` wraps `Some(value)`, returns a new `SignalRef`
+    // /// to the inner value. Otherwise returns `None`.
+    // pub fn to_option_ref(&self, bump: &'a Bump) -> Option<Signal<'a, T>> {
+    //     let variant = match &self.variant {
+    //         SignalVariant::Borrowed(source) => source.value.as_ref().map(|value| {
+    //             SignalVariant::Borrowed(Source {
+    //                 value,
+    //                 has_changed: source.has_changed,
+    //             })
+    //         }),
+    //         SignalVariant::Owned(source) => Option::as_ref(&source.value).map(|value| {
+    //             SignalVariant::Owned(Source {
+    //                 value: Rc::new(value.clone()),
+    //                 has_changed: source.has_changed,
+    //             })
+    //         }),
+    //     };
+
+    //     variant.map(Signal::new)
+    // }
+}
+
+impl<'a, T> Reactive for Signal<'a, T> {
     #[inline]
     fn has_changed(&self) -> bool {
         match &self.variant {
-            SignalRefVariant::Owned(signal) => signal.has_changed(),
-            SignalRefVariant::Borrowed(signal) => signal.has_changed(),
+            SignalVariant::Owned(signal) => signal.has_changed(),
+            SignalVariant::Borrowed { has_changed, .. } => *has_changed,
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct SignalResidual<'a, T>(Signal<'a, T>);
+
+impl<'a, T> Residual<T> for SignalResidual<'a, T> {
+    type TryType = Signal<'a, T>;
+}
+
+impl<'a, T> Try for Signal<'a, T> {
+    type Output = T;
+
+    type Residual = SignalResidual<'a, T>;
+
+    fn from_output(output: T) -> Self {
+        Signal::new(SignalVariant::Owned(Source {
+            value: output,
+            // Because we have successfully continued execution
+            // without short-circuiting, the value has changed.
+            has_changed: true,
+        }))
+    }
+
+    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+        if self.has_changed() {
+            ControlFlow::Continue(self)
+        } else {
+            ControlFlow::Break(SignalResidual(self))
         }
     }
 }
 
-impl<'a, T> Deref for SignalRef<'a, T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        match &self.variant {
-            SignalRefVariant::Owned(signal) => &signal.value,
-            SignalRefVariant::Borrowed(signal) => &signal.value,
-        }
+impl<'a, T> FromResidual for Signal<'a, T> {
+    fn from_residual(residual: SignalResidual<'a, T>) -> Self {
+        residual.0
     }
 }
 
-impl<'a, T> Clone for SignalRef<'a, T> {
-    fn clone(&self) -> Self {
-        Self {
-            variant: self.variant.clone(),
-        }
-    }
-}
+// impl<'a, T> Deref for Signal<'a, T> {
+//     type Target = T;
+
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         match &self.variant {
+//             SignalVariant::Owned(signal) => &signal.value,
+//             SignalVariant::Borrowed(signal) => &signal.value,
+//         }
+//     }
+// }

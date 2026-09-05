@@ -36,8 +36,8 @@ impl Layout {
     }
 }
 
-/// Trait for types that have a natural intrinsic size.
-pub trait IntrinsicSize {
-    /// Returns the intrinsic size of this item.
-    fn intrinsic_size(&self) -> Size;
-}
+// /// Trait for types that have a natural intrinsic size.
+// pub trait IntrinsicSize {
+//     /// Returns the intrinsic size of this item.
+//     fn intrinsic_size(&self) -> Size;
+// }

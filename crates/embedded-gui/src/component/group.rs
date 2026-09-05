@@ -4,7 +4,7 @@ use embedded_graphics::draw_target::DrawTarget;
 use crate::{
     component::Component,
     interactive,
-    layout::{Direction, IntrinsicSize},
+    layout::Direction,
     primitive::Primitive,
     signal::{Reactive, Signal},
     size::Size,
@@ -16,26 +16,19 @@ use crate::{
 /// The `direction` signal controls whether children are laid out left-to-right
 /// or top-to-bottom.
 #[derive(Reactive)]
-pub struct Group {
+pub struct Group<'a> {
     /// The direction children are laid out in.
-    pub direction: Signal<Direction>,
+    pub direction: Signal<'a, Direction>,
     /// The size of this group component.
-    pub size: Signal<Size>,
+    pub size: Signal<'a, Size>,
 }
 
-impl Group {
-    /// Creates a `Group` with zero size (intrinsic sizing will be used).
-    pub fn zero(direction: Signal<Direction>) -> Self {
+impl<'a> Group<'a> {
+    pub fn zero(direction: Signal<'a, Direction>) -> Self {
         Self {
-            size: Signal::constant(Size::zero()),
+            size: Signal::owned_constant(Size::zero()),
             direction,
         }
-    }
-}
-
-impl IntrinsicSize for Group {
-    fn intrinsic_size(&self) -> crate::size::Size {
-        *self.size
     }
 }
 
@@ -47,13 +40,13 @@ impl<
     FocusKey: interactive::Key,
     AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
     AnyPrimitive: Primitive<T>,
-> Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive> for Group
+> Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive> for Group<'a>
 {
     fn view(
-        &self,
+        self,
         v: &'a view::Factory<Event, Msg, FocusKey>,
         children: Children<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
     ) -> crate::view::View<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive> {
-        v.view_ref(*self.direction, children)
+        v.view_ref(self.direction, children)
     }
 }

@@ -21,6 +21,8 @@
 
 #![no_std]
 #![feature(allocator_api)]
+#![feature(try_trait_v2)]
+#![feature(try_trait_v2_residual)]
 
 extern crate alloc;
 extern crate self as embedded_gui;

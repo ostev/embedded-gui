@@ -5,7 +5,7 @@ use bumpalo::Bump;
 use embedded_graphics::draw_target::DrawTarget;
 
 use crate::{
-    component::{Component, background::Background, group::Group},
+    component::{Component, group::Group},
     draw::LocalTarget,
     event::{Handler, HandlerRegistry},
     interactive::{self, FocusState},
@@ -72,12 +72,12 @@ impl<
     AnyPrimitive: Primitive<T>,
 > ComplexWidgetVariant<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>
 {
-    fn intrinsic_size(&self) -> Size {
-        match self {
-            ComplexWidgetVariant::Component(component, _) => component.intrinsic_size(),
-            ComplexWidgetVariant::Primitive(primitive) => primitive.intrinsic_size(),
-        }
-    }
+    // fn intrinsic_size(&self) -> Size {
+    //     match self {
+    //         ComplexWidgetVariant::Component(component, _) => component.intrinsic_size(),
+    //         ComplexWidgetVariant::Primitive(primitive) => primitive.intrinsic_size(),
+    //     }
+    // }
 
     /// Determines whether a complex widget variant has changed and needs
     /// to be updated.
@@ -146,20 +146,20 @@ struct ComplexWidget<
     size: Size,
 }
 
-impl<
-    'a,
-    T: DrawTarget,
-    Event,
-    Msg,
-    FocusKey: interactive::Key,
-    AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
-    AnyPrimitive: Primitive<T>,
-> ComplexWidget<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>
-{
-    fn intrinsic_size(&self) -> Size {
-        self.inner.intrinsic_size()
-    }
-}
+// impl<
+//     'a,
+//     T: DrawTarget,
+//     Event,
+//     Msg,
+//     FocusKey: interactive::Key,
+//     AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
+//     AnyPrimitive: Primitive<T>,
+// > ComplexWidget<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>
+// {
+//     fn intrinsic_size(&self) -> Size {
+//         self.inner.intrinsic_size()
+//     }
+// }
 
 /// Represents a widget that can be interacted with.
 struct InteractiveWidget<
@@ -398,11 +398,12 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
 
         let has_changed = Some(self.focus_key) != self.previous_focus_key
             && (global_key == self.focus_key || Some(global_key) == self.previous_focus_key);
-        let state = if self.focus_key == global_key {
-            Source::custom(FocusState::Focused, has_changed).signal()
-        } else {
-            Source::custom(FocusState::Unfocused, has_changed).signal()
-        };
+        // let state = if self.focus_key == global_key {
+        //     Source::custom(FocusState::Focused, has_changed).signal()
+        // } else {
+        //     Source::custom(FocusState::Unfocused, has_changed).signal()
+        // };
+        let state = todo!();
 
         let contents = view(state);
 
@@ -488,7 +489,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         AnyPrimitive: Primitive<T>,
     >(
         &'a self,
-        direction: Direction,
+        direction: Signal<'a, Direction>,
         children: [Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>; N],
     ) -> View<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive> {
         View {
@@ -509,7 +510,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         AnyPrimitive: Primitive<T>,
     >(
         &'a self,
-        direction: Direction,
+        direction: Signal<'a, Direction>,
         children: Children<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
     ) -> View<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive> {
         View {
@@ -532,7 +533,7 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         &'a self,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        Box<Spacer, &'a Bump>: Into<AnyPrimitive>,
+        Box<Spacer<'a>, &'a Bump>: Into<AnyPrimitive>,
     {
         self.primitive(Sizing::Fill, Spacer::zero())
     }
@@ -550,9 +551,9 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         children: [Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>; N],
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        Box<Group, &'a Bump>: Into<AnyComponent>,
+        Box<Group<'a>, &'a Bump>: Into<AnyComponent>,
     {
-        let component = Group::zero(Signal::constant(direction));
+        let component = Group::zero(Signal::owned_constant(direction));
         self.component(Sizing::Fill, component, children)
     }
 
@@ -570,9 +571,9 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         children: [Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>; N],
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        Box<Group, &'a Bump>: Into<AnyComponent>,
+        Box<Group<'a>, &'a Bump>: Into<AnyComponent>,
     {
-        let component = Group::zero(Signal::constant(direction));
+        let component = Group::zero(Signal::owned_constant(direction));
         self.component(sizing, component, children)
     }
 
@@ -589,9 +590,9 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         children: Children<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        Box<Group, &'a Bump>: Into<AnyComponent>,
+        Box<Group<'a>, &'a Bump>: Into<AnyComponent>,
     {
-        let component: Group = Group::zero(Signal::constant(direction));
+        let component: Group = Group::zero(Signal::owned_constant(direction));
         self.component_ref(sizing, component, children)
     }
 
@@ -607,8 +608,8 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         widget: Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        Box<Group, &'a Bump>: Into<AnyComponent>,
-        Box<Spacer, &'a Bump>: Into<AnyPrimitive>,
+        Box<Group<'a>, &'a Bump>: Into<AnyComponent>,
+        Box<Spacer<'a>, &'a Bump>: Into<AnyPrimitive>,
     {
         self.group_fill(direction, [self.spacer(), widget, self.spacer()])
     }
@@ -624,52 +625,52 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         widget: Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
     ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
     where
-        Box<Group, &'a Bump>: Into<AnyComponent>,
-        Box<Spacer, &'a Bump>: Into<AnyPrimitive>,
+        Box<Group<'a>, &'a Bump>: Into<AnyComponent>,
+        Box<Spacer<'a>, &'a Bump>: Into<AnyPrimitive>,
     {
         self.centered(
             Direction::Vertical,
             self.centered(Direction::Horizontal, widget),
         )
     }
-    /// Creates a background-colored group widget.
-    pub fn background<
-        'a,
-        T: DrawTarget,
-        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
-        AnyPrimitive: Primitive<T>,
-        const N: usize,
-    >(
-        &'a self,
-        sizing: Sizing,
-        color: Signal<T::Color>,
-        children: [Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>; N],
-    ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
-    where
-        Box<Background<T::Color>, &'a Bump>: Into<AnyComponent>,
-        T::Color: Debug + 'a,
-    {
-        self.component(sizing, Background { color }, children)
-    }
+    // /// Creates a background-colored group widget.
+    // pub fn background<
+    //     'a,
+    //     T: DrawTarget,
+    //     AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
+    //     AnyPrimitive: Primitive<T>,
+    //     const N: usize,
+    // >(
+    //     &'a self,
+    //     sizing: Sizing,
+    //     color: Signal<T::Color>,
+    //     children: [Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>; N],
+    // ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
+    // where
+    //     Box<Background<T::Color>, &'a Bump>: Into<AnyComponent>,
+    //     T::Color: Debug + 'a,
+    // {
+    //     self.component(sizing, Background { color }, children)
+    // }
 
-    /// Creates a background-colored group widget from pre-existing children.
-    pub fn background_ref<
-        'a,
-        T: DrawTarget,
-        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
-        AnyPrimitive: Primitive<T>,
-    >(
-        &'a self,
-        sizing: Sizing,
-        color: Signal<T::Color>,
-        children: Children<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
-    ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
-    where
-        Box<Background<T::Color>, &'a Bump>: Into<AnyComponent>,
-        T::Color: Debug + 'a,
-    {
-        self.component_ref(sizing, Background { color }, children)
-    }
+    // /// Creates a background-colored group widget from pre-existing children.
+    // pub fn background_ref<
+    //     'a,
+    //     T: DrawTarget,
+    //     AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
+    //     AnyPrimitive: Primitive<T>,
+    // >(
+    //     &'a self,
+    //     sizing: Sizing,
+    //     color: Signal<T::Color>,
+    //     children: Children<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
+    // ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
+    // where
+    //     Box<Background<T::Color>, &'a Bump>: Into<AnyComponent>,
+    //     T::Color: Debug + 'a,
+    // {
+    //     self.component_ref(sizing, Background { color }, children)
+    // }
 }
 
 /// Represents a collection of widgets laid out in a set direction.
@@ -701,7 +702,7 @@ struct ViewInternals<
     Stage: ViewProcessingStage,
 > {
     widgets: Children<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
-    direction: Direction,
+    direction: Signal<'a, Direction>,
 
     background: Option<T::Color>,
 
@@ -792,114 +793,116 @@ where
         ViewInternals<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive, SizedViewStage>,
         Option<Size>,
     ) {
-        let reduce_fill_space = reduce_fill_space(self.internals.direction);
-        let reduce_fill_space_constrained = reduce_fill_space_constrained(self.internals.direction);
+        // let reduce_fill_space = reduce_fill_space(self.internals.direction.);
+        // let reduce_fill_space_constrained = reduce_fill_space_constrained(self.internals.direction);
 
-        /// Called in a recursive fold to calculate the size of each widget. This function
-        /// mutates the original widget to store this information.
-        fn size_widget<
-            'a,
-            T: DrawTarget,
-            Event,
-            Msg,
-            FocusKey: interactive::Key,
-            AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
-            AnyPrimitive: Primitive<T>,
-        >(
-            bump: &'a Bump,
-            focus_key: FocusKey,
-            direction: Direction,
-            reduce_fill_space: &impl Fn(Size, Size) -> Size,
-            reduce_fill_space_constrained: &impl Fn(Size, u16) -> Size,
-            (num_fill, fill_space): (u16, Size),
-            Widget { variant, .. }: &mut Widget<
-                'a,
-                T,
-                Event,
-                Msg,
-                FocusKey,
-                AnyComponent,
-                AnyPrimitive,
-            >,
-        ) -> (u16, Size) {
-            let size_complex = |complex: &mut ComplexWidget<
-                'a,
-                T,
-                Event,
-                Msg,
-                FocusKey,
-                AnyComponent,
-                AnyPrimitive,
-            >| {
-                match complex.sizing {
-                    Sizing::Intrinsic => {
-                        let size = complex.intrinsic_size();
-                        // println!("Intrinsic size: {:?}", size);
-                        complex.size = size;
-                        (num_fill, reduce_fill_space(fill_space, size))
-                    }
-                    Sizing::Constrained(constraint) => {
-                        complex.size = match direction {
-                            Direction::Horizontal => Size::new(constraint, fill_space.height),
-                            Direction::Vertical => Size::new(fill_space.width, constraint),
-                        };
+        // /// Called in a recursive fold to calculate the size of each widget. This function
+        // /// mutates the original widget to store this information.
+        // fn size_widget<
+        //     'a,
+        //     T: DrawTarget,
+        //     Event,
+        //     Msg,
+        //     FocusKey: interactive::Key,
+        //     AnyComponent: Component<'a, T, Event, Msg, FocusKey, AnyComponent, AnyPrimitive>,
+        //     AnyPrimitive: Primitive<T>,
+        // >(
+        //     bump: &'a Bump,
+        //     focus_key: FocusKey,
+        //     direction: Direction,
+        //     reduce_fill_space: &impl Fn(Size, Size) -> Size,
+        //     reduce_fill_space_constrained: &impl Fn(Size, u16) -> Size,
+        //     (num_fill, fill_space): (u16, Size),
+        //     Widget { variant, .. }: &mut Widget<
+        //         'a,
+        //         T,
+        //         Event,
+        //         Msg,
+        //         FocusKey,
+        //         AnyComponent,
+        //         AnyPrimitive,
+        //     >,
+        // ) -> (u16, Size) {
+        //     let size_complex = |complex: &mut ComplexWidget<
+        //         'a,
+        //         T,
+        //         Event,
+        //         Msg,
+        //         FocusKey,
+        //         AnyComponent,
+        //         AnyPrimitive,
+        //     >| {
+        //         match complex.sizing {
+        //             Sizing::Intrinsic => {
+        //                 let size = complex.intrinsic_size();
+        //                 // println!("Intrinsic size: {:?}", size);
+        //                 complex.size = size;
+        //                 (num_fill, reduce_fill_space(fill_space, size))
+        //             }
+        //             Sizing::Constrained(constraint) => {
+        //                 complex.size = match direction {
+        //                     Direction::Horizontal => Size::new(constraint, fill_space.height),
+        //                     Direction::Vertical => Size::new(fill_space.width, constraint),
+        //                 };
 
-                        (
-                            num_fill,
-                            reduce_fill_space_constrained(fill_space, constraint),
-                        )
-                    }
-                    Sizing::Fill => (num_fill + 1, fill_space),
-                }
-            };
+        //                 (
+        //                     num_fill,
+        //                     reduce_fill_space_constrained(fill_space, constraint),
+        //                 )
+        //             }
+        //             Sizing::Fill => (num_fill + 1, fill_space),
+        //         }
+        //     };
 
-            match variant {
-                WidgetVariant::Complex(complex) => {
-                    let (num_fill, fill_space) = size_complex(complex);
-                    (num_fill, fill_space)
-                }
-                WidgetVariant::Interactive(interactive) => {
-                    let (num_fill, fill_space) = size_widget(
-                        bump,
-                        focus_key,
-                        direction,
-                        reduce_fill_space,
-                        reduce_fill_space_constrained,
-                        (num_fill, fill_space),
-                        &mut interactive.contents,
-                    );
+        //     match variant {
+        //         WidgetVariant::Complex(complex) => {
+        //             let (num_fill, fill_space) = size_complex(complex);
+        //             (num_fill, fill_space)
+        //         }
+        //         WidgetVariant::Interactive(interactive) => {
+        //             let (num_fill, fill_space) = size_widget(
+        //                 bump,
+        //                 focus_key,
+        //                 direction,
+        //                 reduce_fill_space,
+        //                 reduce_fill_space_constrained,
+        //                 (num_fill, fill_space),
+        //                 &mut interactive.contents,
+        //             );
 
-                    (num_fill, fill_space)
-                }
-            }
-        }
+        //             (num_fill, fill_space)
+        //         }
+        //     }
+        // }
 
-        let (num_fill, fill_space) = self.internals.widgets.0.iter_mut().fold(
-            (0, available_space),
-            |(num_fill, fill_space), widget| {
-                size_widget(
-                    bump,
-                    focus_key,
-                    self.internals.direction,
-                    &reduce_fill_space,
-                    &reduce_fill_space_constrained,
-                    (num_fill, fill_space),
-                    widget,
-                )
-            },
-        );
+        // let (num_fill, fill_space) = self.internals.widgets.0.iter_mut().fold(
+        //     (0, available_space),
+        //     |(num_fill, fill_space), widget| {
+        //         size_widget(
+        //             bump,
+        //             focus_key,
+        //             self.internals.direction,
+        //             &reduce_fill_space,
+        //             &reduce_fill_space_constrained,
+        //             (num_fill, fill_space),
+        //             widget,
+        //         )
+        //     },
+        // );
 
-        let size_per_widget = if num_fill > 0 {
-            Some(
-                fill_space
-                    / match self.internals.direction {
-                        Direction::Horizontal => Size::new(num_fill, 1),
-                        Direction::Vertical => Size::new(1, num_fill),
-                    },
-            )
-        } else {
-            None
-        };
+        // let size_per_widget = if num_fill > 0 {
+        //     Some(
+        //         fill_space
+        //             / match self.internals.direction {
+        //                 Direction::Horizontal => Size::new(num_fill, 1),
+        //                 Direction::Vertical => Size::new(1, num_fill),
+        //             },
+        //     )
+        // } else {
+        //     None
+        // };
+
+        let size_per_widget = todo!();
 
         (
             ViewInternals {
@@ -926,7 +929,8 @@ where
             self.compute_size_per_widget(&factory.bump, available_space, factory.focus_key);
         let size_per_widget = size_per_widget_option.unwrap_or(Size::zero());
 
-        let adjust_position = adjust_position(sized_view.direction);
+        // let adjust_position = adjust_position(sized_view.direction);
+        let adjust_position = todo!();
 
         fn update_position<
             'a,
@@ -978,8 +982,9 @@ where
                 .variant
                 .has_changed(factory.focus_key, factory.previous_focus_key);
 
-            let new_position =
-                update_position(&mut widget, &adjust_position, size_per_widget, position);
+            // let new_position =
+            //     update_position(&mut widget, &adjust_position, size_per_widget, position);
+            let new_position = todo!();
 
             let complex = widget.variant.complex();
 

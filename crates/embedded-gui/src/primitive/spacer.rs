@@ -1,6 +1,10 @@
 use embedded_graphics::draw_target::DrawTarget;
 
-use crate::{primitive::Primitive, signal::Reactive, signal::Signal, size::Size};
+use crate::{
+    primitive::{Primitive, PrimitiveContext},
+    signal::{Reactive, Signal},
+    size::Size,
+};
 
 /// A spacer primitive that takes up space but draws nothing.
 ///
@@ -27,7 +31,11 @@ impl<'a> Spacer<'a> {
 // }
 
 impl<'a, T: DrawTarget> Primitive<T> for Spacer<'a> {
-    fn draw(self, _target: &mut crate::draw::LocalTarget<T>) -> Result<(), T::Error> {
+    fn draw(
+        self,
+        _p: &PrimitiveContext,
+        _target: &mut crate::draw::LocalTarget<T>,
+    ) -> Result<(), T::Error> {
         Ok(())
     }
 }

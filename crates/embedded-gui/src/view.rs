@@ -11,7 +11,7 @@ use crate::{
     interactive::{self, FocusState},
     layout::{Direction, Sizing},
     position::Position,
-    primitive::{Primitive, spacer::Spacer},
+    primitive::{Primitive, PrimitiveContext, spacer::Spacer},
     signal::{Signal, Source},
     size::Size,
 };
@@ -1008,7 +1008,7 @@ where
                             Some(mut local_target) => {
                                 local_target
                                     .clear(sized_view.background.unwrap_or(background_color))?;
-                                primitive.draw(&mut local_target)?;
+                                primitive.draw(&PrimitiveContext::new(), &mut local_target)?;
                             }
                             None => {}
                         }

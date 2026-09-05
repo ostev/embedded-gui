@@ -12,7 +12,7 @@ use embedded_graphics::{
 };
 
 use crate::{
-    primitive::Primitive,
+    primitive::{Primitive, PrimitiveContext},
     signal::{Reactive, Signal},
     size::Size,
 };
@@ -41,20 +41,23 @@ pub struct Text<'model, Color: PixelColor, S: AsRef<str>> {
 impl<'model, 'a, Color: PixelColor + Debug, T: DrawTarget<Color = Color>, S: AsRef<str>>
     Primitive<T> for Text<'model, Color, S>
 {
-    fn draw(self, target: &mut crate::draw::LocalTarget<T>) -> Signal<'a, Result<(), T::Error>> {
+    fn draw(
+        self,
+        p: &PrimitiveContext,
+        target: &mut crate::draw::LocalTarget<T>,
+    ) -> Result<(), T::Error> {
         let text_style = TextStyleBuilder::new()
             .alignment(Alignment::Left)
             .baseline(embedded_graphics::text::Baseline::Top)
             .build();
 
-        // embedded_graphics::text::Text::with_text_style(
-        //     self.content.as_ref(),
-        //     Point::zero(),
-        //     self.font_style,
-        //     text_style,
-        // )
-        // .draw(target)?;
-        todo!();
+        embedded_graphics::text::Text::with_text_style(
+            self.content.unsignal(p).as_ref(),
+            Point::zero(),
+            self.font_style.unsignal_copy(p),
+            text_style,
+        )
+        .draw(target)?;
 
         Ok(())
     }

@@ -223,7 +223,7 @@ impl<T> Signal<T> {
     /// [`SignalRef`], preserving the change flag.
     pub fn map_to_owned_ref<'a, U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
         SignalRef::new(SignalRefVariant::Owned(Source {
-            value: Rc::new_in(f(&self.source.value), bump),
+            value: Rc::new(f(&self.source.value)),
             has_changed: self.source.has_changed,
         }))
     }
@@ -247,7 +247,11 @@ impl<T> Deref for Signal<T> {
 
 #[derive(PartialEq, Eq, Debug)]
 enum SignalRefVariant<'a, T> {
-    Owned(Source<Rc<T, &'a Bump>>),
+    // TODO: this isn't a great way to pass data around, and requires a bunch of
+    // unnecessary heap allocation. Previously this was using a bump-allocated `Rc`,
+    // but that broke in the most recent nightly. I'm planning on fully refactoring the
+    // signal design, so I'll leave it as this for now.
+    Owned(Source<Rc<T>>),
     Borrowed(Source<&'a T>),
 }
 
@@ -255,7 +259,7 @@ impl<'a, T> Clone for SignalRefVariant<'a, T> {
     fn clone(&self) -> Self {
         match self {
             SignalRefVariant::Owned(source) => SignalRefVariant::Owned(Source {
-                value: source.value.clone(),
+                value: Rc::clone(&source.value),
                 has_changed: source.has_changed,
             }),
             SignalRefVariant::Borrowed(source) => SignalRefVariant::Borrowed(*source),
@@ -292,7 +296,7 @@ impl<'a, T> SignalRef<'a, T> {
     #[inline(always)]
     pub fn owned_constant(value: T, bump: &'a Bump) -> Self {
         SignalRef::new(SignalRefVariant::Owned(Source {
-            value: Rc::new_in(value, bump),
+            value: Rc::new(value),
             has_changed: false,
         }))
     }
@@ -302,11 +306,11 @@ impl<'a, T> SignalRef<'a, T> {
     pub fn map_ref<U>(&self, bump: &'a Bump, f: impl Fn(&T) -> U) -> SignalRef<'a, U> {
         SignalRef::new(match &self.variant {
             SignalRefVariant::Owned(signal) => SignalRefVariant::Owned(Source {
-                value: Rc::new_in(f(&signal.value), bump),
+                value: Rc::new(f(&signal.value)),
                 has_changed: signal.has_changed,
             }),
             SignalRefVariant::Borrowed(signal) => SignalRefVariant::Owned(Source {
-                value: Rc::new_in(f(&signal.value), bump),
+                value: Rc::new(f(&signal.value)),
                 has_changed: signal.has_changed,
             }),
         })
@@ -363,7 +367,7 @@ where
             }),
             SignalRefVariant::Owned(source) => Option::as_ref(&source.value).map(|value| {
                 SignalRefVariant::Owned(Source {
-                    value: Rc::new_in(value.clone(), bump),
+                    value: Rc::new(value.clone()),
                     has_changed: source.has_changed,
                 })
             }),

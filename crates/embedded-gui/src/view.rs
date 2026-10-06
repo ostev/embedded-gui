@@ -537,6 +537,22 @@ impl<Event, GlobalMsg, GlobalFocusKey: interactive::Key> Factory<Event, GlobalMs
         self.primitive(Sizing::Fill, Spacer::zero())
     }
 
+    /// Creates spacer widget with set size.
+    pub fn sized_spacer<
+        'a,
+        T: DrawTarget,
+        AnyComponent: Component<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>,
+        AnyPrimitive: Primitive<T>,
+    >(
+        &'a self,
+        size: Signal<Size>,
+    ) -> Widget<'a, T, Event, GlobalMsg, GlobalFocusKey, AnyComponent, AnyPrimitive>
+    where
+        Box<Spacer, &'a Bump>: Into<AnyPrimitive>,
+    {
+        self.primitive(Sizing::Intrinsic, Spacer { size })
+    }
+
     /// Creates a fill-sized group widget.
     pub fn group_fill<
         'a,

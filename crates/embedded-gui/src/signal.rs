@@ -5,6 +5,7 @@ use core::{
 
 use alloc::{borrow::Cow, rc::Rc};
 use bumpalo::{Bump, boxed::Box};
+
 pub use embedded_gui_macros::Reactive;
 
 use crate::app::State;

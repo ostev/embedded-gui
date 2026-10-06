@@ -272,11 +272,11 @@ impl App for DialApp {
                     Panel {
                         info_1: ControlInfo {
                             progress: Signal::constant(0.35),
-                            label: SignalRef::constant(&"DIAL 1"),
+                            label: SignalRef::constant(&"Left"),
                         },
                         info_2: ControlInfo {
                             progress: Signal::constant(0.72),
-                            label: SignalRef::constant(&"DIAL 2"),
+                            label: SignalRef::constant(&"Right"),
                         },
                         color: Signal::constant(Color::On),
                     },
